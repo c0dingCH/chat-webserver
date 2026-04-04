@@ -2,6 +2,7 @@
 #include"Common.h"
 #include<functional>
 #include<memory>
+#include<map>
 
 class TcpConnection;
 class TcpServer;
@@ -30,9 +31,9 @@ public:
   void OnConnection(const TcpConnectionPtr & conn);
   void OnMessage(const TcpConnectionPtr & conn);
   void Onrequest(const TcpConnectionPtr & conn, HttpRequest * request);
-  
-  void ActiveCloseConn(const std::weak_ptr<TcpConnection> & conn);
 
+  void ActiveCloseConn(const std::weak_ptr<TcpConnection> & conn);
+    
   
   void Start();
   void SetThreadNums(const int &);
@@ -41,8 +42,8 @@ public:
 
 private:
   std::unique_ptr<TcpServer> server_;
-  
   bool auto_close_conn_{false};
-
   HttpResponseCallback response_;
+
+  std::map<std::string,TcpConnectionPtr>id_conn_;
 };

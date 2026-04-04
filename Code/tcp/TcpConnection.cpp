@@ -95,7 +95,7 @@ void TcpConnection::HandleClose(){
     
     channel_ -> DisableAll();
     if(on_close_){ 
-      on_close_(shared_from_this());
+      on_close_(shared_from_this(),on_close_busi_);
     }
     
     std::cout<<"client fd: "<<connfd_<<" Closed "<<std::endl;
@@ -271,7 +271,7 @@ Buffer * TcpConnection::GetSendBuffer() const{
 
 
 
-void TcpConnection::SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> &cb){
+void TcpConnection::SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>, std::function<void()> )> &cb){
   on_close_ = std::move(cb);
 }
 
@@ -281,6 +281,10 @@ void TcpConnection::SetOnMessageCallback(const std::function<void(const std::sha
 
 void TcpConnection::SetOnConnectCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> &cb){
   on_connect_ = std::move(cb);
+}
+
+void TcpConnection::SetOnCloseBusi(const std::function<void()> &cb){
+  on_close_busi_ = std::move(cb);
 }
 
 void TcpConnection::SetTimeStamp(TimeStamp timestamp){

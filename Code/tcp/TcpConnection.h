@@ -25,9 +25,10 @@ public:
   void ConnectionEstablished();
   void ConnectionDestructor();
 
-  void SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> &cb);
+  void SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>, const std::function<void()> )> &cb);
   void SetOnMessageCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> & cb);
   void SetOnConnectCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> & cb);
+  void SetOnCloseBusi(const std::function<void()> & cb);
   void SetTimeStamp(TimeStamp timestamp);
 
   void Read();
@@ -65,9 +66,10 @@ private:
   std::unique_ptr<Buffer> read_buffer_;
   std::unique_ptr<Buffer> send_buffer_;
 
-  std::function<void(const std::shared_ptr<TcpConnection>)> on_close_;
+  std::function<void(const std::shared_ptr<TcpConnection>, const std::function<void()>)> on_close_;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_message_;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_connect_;
+  std::function<void()>on_close_busi_;
 
   void ReadNonBlocking();
   void WriteNonBlocking();
