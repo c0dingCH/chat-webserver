@@ -40,7 +40,7 @@ public:
   void SetThreadNums(const int &);
   void SetMysqlNums(const int &);
   void SetAutoCloseConn(bool auto_close);
-
+  
 
 private:
   std::unique_ptr<TcpServer> server_;
@@ -48,5 +48,5 @@ private:
   bool auto_close_conn_{false};
   HttpResponseCallback response_;
 
-  std::map<std::string,TcpConnectionPtr>id_conn_;
+  std::map<std::string,TcpConnectionPtr >id_conn_;
 };

@@ -154,3 +154,8 @@ void HttpServer::SetMysqlNums(const int & conn_nums){
 void HttpServer::SetAutoCloseConn(bool auto_close){
   auto_close_conn_ = auto_close;
 }
+
+
+
+
+
