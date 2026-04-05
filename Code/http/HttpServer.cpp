@@ -7,6 +7,7 @@
 #include"Buffer.h"
 #include"EventLoop.h"
 #include"Logging.h"
+#include"MysqlPool.h"
 
 #include<functional>
 #include<memory>
@@ -139,10 +140,15 @@ void HttpServer::ActiveCloseConn(const std::weak_ptr<TcpConnection> & weak_ptr){
 
 void HttpServer::Start(){
   server_->Start();
+  mysql_pool_->Start();
 }
 
 void HttpServer::SetThreadNums(const int & thread_nums){
   server_ -> SetThreadNums(thread_nums);
+}
+
+void HttpServer::SetMysqlNums(const int & conn_nums){
+  mysql_pool_ -> SetMysqlNums(conn_nums);
 }
 
 void HttpServer::SetAutoCloseConn(bool auto_close){

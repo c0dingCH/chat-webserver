@@ -10,6 +10,7 @@ class HttpResponse;
 class HttpContext;
 class HttpRequest;
 class EventLoop;
+class MysqlPool;
 
 #define AUTOCLOSETIMEOUT 10.0
 
@@ -37,11 +38,13 @@ public:
   
   void Start();
   void SetThreadNums(const int &);
+  void SetMysqlNums(const int &);
   void SetAutoCloseConn(bool auto_close);
 
 
 private:
   std::unique_ptr<TcpServer> server_;
+  std::unique_ptr<MysqlPool> mysql_pool_;
   bool auto_close_conn_{false};
   HttpResponseCallback response_;
 
