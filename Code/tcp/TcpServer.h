@@ -19,8 +19,8 @@ public:
 
   void Start();
   void HandleNewConnection(int sockfd);
-  void HandleCloseConnection(const std::shared_ptr<TcpConnection> &conn, const std::function<void()> &cb);
-  void HandleCloseConnectionInPoller(const std::shared_ptr<TcpConnection> &conn, const std::function<void()> &cb);
+  void HandleCloseConnection(const std::shared_ptr<TcpConnection> &conn);
+  void HandleCloseConnectionInPoller(const std::shared_ptr<TcpConnection> &conn);
 
   void OnConnect (const std:: function<void(const std::shared_ptr<TcpConnection>)> &cb);
   void OnMessage (const std:: function<void(const std::shared_ptr<TcpConnection>)> &cb);
@@ -36,4 +36,6 @@ private:
 
   std::function<void(const std::shared_ptr<TcpConnection>)> on_connect_ ;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_message_ ;
+
+  void Initial();
 };

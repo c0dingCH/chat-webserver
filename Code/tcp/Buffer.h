@@ -53,6 +53,6 @@ private:
   std::vector<char> buffer_;
   int read_index_;
   int write_index_;
-
+  
 };
 

@@ -21,7 +21,7 @@ public:
   MysqlStatus Delete(const std::string &user_id);
   MysqlStatus Update(const std::string &user_id, const std::string &password);
   MysqlStatus Select(const std::string &user_id); 
-
+  MysqlStatus Login(const std::string &user_id, const std::string &password);
   const char * GetMsg(MysqlStatus state); 
 
 private:

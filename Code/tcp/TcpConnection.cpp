@@ -29,7 +29,7 @@ TcpConnection::TcpConnection(EventLoop * loop, int connfd ,int connid):loop_(loo
   } 
   read_buffer_ = std::make_unique<Buffer>();
   send_buffer_ = std::make_unique<Buffer>();
-  state_ = State::Connected;
+  state_ = State::kConnected;
 
   context_ = std::make_unique<HttpContext>();
 }
@@ -56,7 +56,7 @@ void TcpConnection::ConnectionDestructor(){
 
 void TcpConnection::HandleMessage(){
   Read();
-  if(state_ == State::Connected && on_message_){
+  if(state_ == State::kConnected && on_message_){
     on_message_(shared_from_this());
     
   }
@@ -64,7 +64,7 @@ void TcpConnection::HandleMessage(){
 
 void TcpConnection::HandleWrite(){
   if(channel_ -> IsWriting()){
-    if(state_ == State::Connected){
+    if(state_ == State::kConnected){
       ssize_t n = write(connfd_, send_buffer_ -> beginread(), send_buffer_ -> readablebytes());
       send_buffer_ -> Retrieve(n);
 
@@ -75,7 +75,14 @@ void TcpConnection::HandleWrite(){
         }
       }
       else{
-        LOG_ERROR << "syswrite error";
+        if(errno != EAGAIN && errno != EWOULDBLOCK){
+          LOG_ERROR << "syswrite error";
+          if(errno == EPIPE || errno == ECONNRESET){
+            fault_error_ = true;
+            send_buffer_ -> RetrieveAll();
+            channel_ -> DisableWrite();
+          }
+        }
       }
 
     }
@@ -88,25 +95,23 @@ void TcpConnection::HandleWrite(){
 
 
 void TcpConnection::HandleClose(){
-  if(state_ != State::Closed){
-    state_ = State::Closed;
-
-    std::cout<<"client fd : "<<connfd_<<"is closing"<<std::endl;
+  if(state_ != State::kClosed){
+    state_ = State::kClosed;
+    
+    LOG_INFO <<"client fd: "<<connfd_<<" kClosed ";
     
     channel_ -> DisableAll();
+
+    if(on_close_busi_){
+      on_close_busi_();
+    }
     if(on_close_){ 
-      on_close_(shared_from_this(),on_close_busi_);
+      on_close_(shared_from_this());
     }
     
-    std::cout<<"client fd: "<<connfd_<<" Closed "<<std::endl;
   }
 }       
 
-
-void TcpConnection::Write(){
-  WriteNonBlocking();
-  send_buffer_->RetrieveAll();
-}
 
 void TcpConnection::Read(){
   read_buffer_->RetrieveAll();
@@ -114,37 +119,34 @@ void TcpConnection::Read(){
 }
 
 void TcpConnection::Send(const char * msg){
-  Send(msg,strlen(msg));
+  Send(std::string(msg));
 }
 
-void TcpConnection::Send(const char * msg,int len){
-  send_buffer_->Append(msg,len);
-  Write();
+void TcpConnection::Send(const std::string & msg){ // Send 安全问题，在RunOneFunc里面有控制到，自己线程直接跑，别的线程串行跑,用回调排队还能防止其他线程串行等待 
+  if(state_ == State::kConnected){
+    loop_ -> RunOneFunc(std::bind(&TcpConnection::SendInLoop, this, msg));    
+  } 
 }
 
-void TcpConnection::Send(const std::string & msg){
-  Send(msg.data(), msg.size());
-}
-
-void TcpConnection::SendInLoop(const char * msg){
-  SendInLoop(msg,strlen(msg));  
-}
-
-void TcpConnection::SendInLoop(const char * msg, int len){
-  if(state_ == State::Connected){
+void TcpConnection::SendInLoop(const std::string &msg){
+  fault_error_ = false;
+  if(state_ == State::kConnected){
     ssize_t n = 0;
     if(!channel_ -> IsWriting() && send_buffer_ -> readablebytes() == 0){
-      n = write(connfd_, msg, len);
+      n = write(connfd_, msg.c_str(), msg.size());
     }
     if(n < 0){
       n = 0;
       if(errno != EAGAIN && errno != EWOULDBLOCK){
-        LOG_ERROR << "syswrite error";
+        LOG_ERROR << "systemp error";
+        if(errno == EPIPE || errno == ECONNRESET){ //写入已经关闭了的连接，可能还有其他errno值
+          fault_error_ = true;
+        }
       }
+     
     }
-    
-    if(n < len){
-      send_buffer_ -> Append(msg + n, len - n);
+    if(n < static_cast<int>(msg.size()) && !fault_error_){
+      send_buffer_ -> Append(msg.c_str() + n, msg.size() - n);
       if(!channel_ -> IsWriting()){
         channel_ -> EnableWrite();
       }
@@ -153,10 +155,6 @@ void TcpConnection::SendInLoop(const char * msg, int len){
   else{
     LOG_ERROR << "give up writing for disconnection";
   }
-}
-
-void TcpConnection::SendInLoop(const std::string & msg){
-  SendInLoop(msg.data(),msg.size());
 }
 
 
@@ -209,29 +207,29 @@ void TcpConnection::ReadNonBlocking(){
   }
 }
 
-void TcpConnection::WriteNonBlocking(){
-  int sockfd = connfd_;
-  char buf[send_buffer_->readablebytes()];
-  memcpy(buf,send_buffer_->beginread(), send_buffer_->readablebytes());
-  int data_size = send_buffer_->readablebytes();
-  int data_left = data_size;
-  while(data_left > 0){
-    ssize_t write_bytes = ::write(sockfd, buf + data_size - data_left, data_left);
-    if(write_bytes == -1){
-      if(errno == EINTR){
-        printf("continue writing\n");
-        continue;
-      }
-      else if(errno == EAGAIN || errno == EWOULDBLOCK) break;
-      else{
-        printf("Other errno on client %d write",sockfd);
-        HandleClose();
-        break;
-      }
-    }
-   data_left -= write_bytes;
-  }
-}
+//void TcpConnection::WriteNonBlocking(){
+//  int sockfd = connfd_;
+//  char buf[send_buffer_->readablebytes()];
+//  memcpy(buf,send_buffer_->beginread(), send_buffer_->readablebytes());
+//  int data_size = send_buffer_->readablebytes();
+//  int data_left = data_size;
+//  while(data_left > 0){
+//    ssize_t write_bytes = ::write(sockfd, buf + data_size - data_left, data_left);
+//    if(write_bytes == -1){
+//      if(errno == EINTR){
+//        printf("continue writing\n");
+//        continue;
+//      }
+//      else if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+//      else{
+//        printf("Other errno on client %d write",sockfd);
+//        HandleClose();
+//        break;
+//      }
+//    }
+//   data_left -= write_bytes;
+//  }
+//}
 
 
 TcpConnection::State TcpConnection::GetState() const{
@@ -271,7 +269,7 @@ Buffer * TcpConnection::GetSendBuffer() const{
 
 
 
-void TcpConnection::SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>, std::function<void()> )> &cb){
+void TcpConnection::SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> &cb){
   on_close_ = std::move(cb);
 }
 

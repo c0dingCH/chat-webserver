@@ -91,6 +91,31 @@ Mysql::MysqlStatus Mysql::Select(const std::string &user_id){
   return row == 1 ? MysqlStatus::kSuccess : MysqlStatus::kNotFound;
 }
 
+Mysql::MysqlStatus Mysql::Login(const std::string &user_id, const std::string & password){
+  if(Select(user_id) != MysqlStatus::kSuccess)return MysqlStatus::kNotFound;
+  std::string sql = "select * from users where user_id = " + varchar(user_id);
+  MYSQL_RES * res{nullptr};
+  mysql_query(&conn_, sql.c_str());
+  res = mysql_store_result(&conn_);
+  
+  bool suc = false;
+  MYSQL_ROW row;
+  MYSQL_FIELD *fields;
+  int cols = mysql_num_fields(res);
+  fields = mysql_fetch_fields(res);
+  row = mysql_fetch_row(res);
+  for(int i = 0;i < cols ;i++){
+    if(fields[i].name == std::string("password")){
+      suc = row[i] == password;
+      break;
+    }
+  }
+
+  mysql_free_result(res);
+  return suc ? MysqlStatus::kSuccess : MysqlStatus::kFailed;
+}
+
+
 const char * Mysql::GetMsg(MysqlStatus state){
   switch(state){
     case MysqlStatus::kUserIdIllegal:return "User_id Illegal";

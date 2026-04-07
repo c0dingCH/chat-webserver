@@ -1,18 +1,19 @@
 #pragma once
+#include"MysqlPool.h"
+#include"Api.h"
 #include<memory>
 #include<string>
-#include<functional>
-class TcpConnection;
 
-class User{
-public:
-  User(const std::shared_ptr<TcpConnection>&conn, const std::function<void()>&cb);
-  ~User();
 
-  void Send(const unique_ptr<User>& target, const std::string &msg);
-  std::shared_ptr<TcpConnection> GetConn();
+namespace api::user{
+  void HandleRegister(const HttpObjs& hs);
+  void HandleLogin(const HttpObjs& hs);
+  void HandleProfile(const HttpObjs& hs);
   
-
-private:
-  std::shared_ptr<TcpConnection>conn_;
+  template<typename Func>
+  void WithConnection(std::unique_ptr<MysqlPool>& mysql_pool, Func && func){
+    std::unique_ptr<Mysql> db = mysql_pool->Get();
+    func(db);
+    mysql_pool->Put(db);
+  }
 }

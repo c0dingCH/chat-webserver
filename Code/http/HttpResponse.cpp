@@ -1,11 +1,10 @@
 #include"HttpResponse.h"
 
-
-
-HttpResponse::HttpResponse(bool close_connection):
+HttpResponse::HttpResponse(bool close_connection)
+: version_("HTTP/2.0"),
   status_code_(HttpStatusCode::kUnknow), 
   close_connection_(close_connection)
-  {}
+{}
 
 HttpResponse::~HttpResponse(){}
 
@@ -22,25 +21,27 @@ void HttpResponse::SetCloseConnection(bool close_connection){
   close_connection_ = close_connection;
 }
 
-void HttpResponse::SetContentType(const std::string & content_type){
-  headers_["Content-Type"] = content_type;
-}
-
 void HttpResponse::AddHeader(const std::string & key, const std::string &value){
   headers_[key] = value;
 }
 
-void HttpResponse::SetBody(const std::string & body){
-  body_ = body;
-  SetBodyLength(body_.size());
-}
-void HttpResponse::SetBodyLength(int body_length){
-  body_length_ = body_length;
-}
-int HttpResponse::GetBodyLength(){
-  return body_length_;
+std::string HttpResponse::GetHeader(const std::string &key) const {
+  std::string res;
+  auto it = headers_.find(key);
+  if(it != headers_.end())res = it->second;
+  return res;
 }
 
+void HttpResponse::SetBody(const std::string & body){
+  body_ = body;
+  SetContentLength(body_.size());
+}
+void HttpResponse::SetContentLength(int content_length){
+  content_length_ = content_length;
+}
+int HttpResponse::GetContentLength() const{
+  return content_length_;
+}
 
 
 bool HttpResponse::IsInCloseConnection(){
@@ -51,10 +52,11 @@ std::string HttpResponse::GetMessage(){
   return GetBeforeBody() + body_ + "\r\n";
 
 }
-
+//这里http版本先用2.0 兼容性暂无
 std::string HttpResponse::GetBeforeBody(){
   std::string message;
-  message += ("HTTP/1.1 " + 
+  message += (version_ + 
+              " " +  
               std::to_string(status_code_) +
               " " + 
               status_message_ + "\r\n" 
@@ -64,13 +66,7 @@ std::string HttpResponse::GetBeforeBody(){
     message += "Connection: close\r\n";
   }
   else{
-    if(body_type_ == HttpBodyType::kHtml){
-      message += "Content-Length: " + std::to_string(body_.size()) + "\r\n";
-    }
-    else{
-      message += "Content-Length: " + std::to_string(body_length_) + "\r\n";
-    }
-
+    message += "Content-Length: " + std::to_string(content_length_) + "\r\n";
     message += "Connection: Keep-Alive\r\n";
   }
 
@@ -83,14 +79,6 @@ std::string HttpResponse::GetBeforeBody(){
   return message;
 } 
 
-
-void HttpResponse::SetBodyType(HttpBodyType body_type){
-  body_type_ = body_type;
-}
-
-HttpResponse::HttpBodyType HttpResponse::GetBodyType(){
-  return body_type_;
-}
 
 void HttpResponse::SetFileFd(int filefd){
   filefd_ = filefd;

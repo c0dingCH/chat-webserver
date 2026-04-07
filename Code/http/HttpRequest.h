@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <map>
-
+#include <rapidjson/document.h>
 
 class HttpRequest{
 public:
@@ -18,7 +18,9 @@ public:
     {
         kUnknown = 0,
         kHttp10,
-        kHttp11
+        kHttp11,
+        kHttp20,
+        kHttp30
     };
 
     HttpRequest();
@@ -49,8 +51,13 @@ public:
     void SetBody(const std::string &str);
     const std::string & GetBody() const;
 
-    void AddBody(const std::string &key, const std::string &value);
-    const std::string GetBody(const std::string &key) const;
+    //void AddBody(const std::string &key, const std::string &value);
+   // const std::string GetBody(const std::string &key) const;
+    
+    void ParseJson2Dom();
+    std::string ParseJson2String();
+    std::string ParseJson2String(rapidjson::Document & dom);
+    rapidjson::Document& GetDom();
 private:
     Method method_; // 请求方法
     Version version_; // 版本
@@ -62,9 +69,8 @@ private:
     std::string protocol_;
 
     std::map<std::string, std::string> headers_; // 请求头
-
-    std::string body_; // 请求体
-
-    
-    std::map<std::string,std::string>bodys_;
+    std::string body_; // 请求体    
+                       //
+   // std::map<std::string,std::string>bodys_;
+    rapidjson::Document dom_;
 };

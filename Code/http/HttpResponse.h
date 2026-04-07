@@ -15,44 +15,39 @@ public:
     k500internalServerError = 500
   };
   
-  enum HttpBodyType{
-    kHtml,
-    kFile
-  };
 
   HttpResponse(bool close_connection);
   ~HttpResponse();
 
+  void SetVersion(const std::string &version);
   void SetStatusCode(HttpStatusCode status_code);
   void SetStatusMessage(const std::string & message);
   void SetCloseConnection(bool close_connection);
   
-  void SetContentType(const std::string &content_type);
   void AddHeader(const std::string& key, const std::string &value);
+  std::string GetHeader(const std::string &key) const;
 
   void SetBody(const std::string & body);
-  void SetBodyLength(int len);
-  int GetBodyLength();
+  void SetContentLength(int len);
+  int GetContentLength() const;
 
   std::string GetMessage();
   std::string GetBeforeBody();
 
   bool IsInCloseConnection();
 
-  void SetBodyType(HttpBodyType body_type);
-  HttpBodyType GetBodyType();
   void SetFileFd(int filefd);
   int GetFileFd();
 
 private:
   std::map<std::string,std::string>headers_;
-
+  
+  std::string version_;
   HttpStatusCode status_code_;
   std::string status_message_;
   std::string body_;
-  int body_length_{0};
-  bool close_connection_{false};
 
-  HttpBodyType body_type_{HttpBodyType::kHtml};
+  int content_length_{0};
+  bool close_connection_{false};
   int filefd_{-1};
 };

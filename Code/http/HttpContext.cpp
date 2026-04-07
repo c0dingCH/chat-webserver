@@ -25,7 +25,7 @@ bool HttpContext::ParseRequest(const char *begin, int size){
 
     char *start = const_cast<char *>(begin);
     char *end = start;
-    char *colon = end; // 对于URL:PARAMS 和 HeaderKey: HeaderValue保存中间的位置
+    char *colon = end; 
     while(state_ != HttpRequestParseState::kINVALID 
         && state_ != HttpRequestParseState::COMPLETE
         && end - begin <= size){
@@ -253,6 +253,10 @@ bool HttpContext::ParseRequest(const char *begin, int size){
                 //std::cout << "bodylength:" << bodylength << std::endl;
                 request_->SetBody(std::string(start, start + bodylength));
                 state_ = HttpRequestParseState::COMPLETE;
+                
+                if(state_ == HttpRequestParseState::COMPLETE && request_->GetHeader("Content-Type").substr(0,16) == "application/json"){
+                  request_->ParseJson2Dom();
+                } 
                 break;
             }
 

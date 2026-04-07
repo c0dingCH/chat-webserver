@@ -4,6 +4,8 @@
 #include <string>
 #include <map>
 #include <iostream>
+#include <rapidjson/writer.h>
+#include <rapidjson/stringbuffer.h>
 
 HttpRequest::HttpRequest() : method_(kInvalid), version_(kUnknown){
 };
@@ -15,6 +17,10 @@ void HttpRequest::SetVersion(const std::string & ver){
     version_ = Version::kHttp10;
   }else if(ver == "1.1"){
     version_ = Version::kHttp11;
+  }else if(ver == "2.0"){
+    version_ = Version::kHttp20;
+  }else if(ver == "3.0"){
+    version_ = Version::kHttp30;
   }else{
     version_ = Version::kUnknown;
   }
@@ -47,7 +53,7 @@ bool HttpRequest::SetMethod(const std::string &_method){
     method_ = Method::kHead;
   }else if(_method == "PUT"){
     method_ = Method::kPut;
-  }else if(_method == "Delete"){
+  }else if(_method == "DELETE"){
     method_ = Method::kDelete;
   }else{
     method_ = Method::kInvalid;
@@ -133,17 +139,34 @@ const std::string & HttpRequest::GetBody() const{
 }
 
 
-void HttpRequest::AddBody(const std::string &key, const std::string & value){
-  bodys_[key] = value;
+//void HttpRequest::AddBody(const std::string &key, const std::string & value){
+//  bodys_[key] = value;
+//}
+//const std::string HttpRequest::GetBody(const std::string &key) const{
+//  std::string result;
+//  auto it = bodys_.find(key);
+//  if(it!=headers_.end()){
+//    result = it->second;
+//  }
+//  return result;
+//}
+
+
+void HttpRequest::ParseJson2Dom(){
+  dom_.Parse(body_.c_str());
 }
-const std::string HttpRequest::GetBody(const std::string &key) const{
-  std::string result;
-  auto it = bodys_.find(key);
-  if(it!=headers_.end()){
-    result = it->second;
-  }
-  return result;
+
+std::string HttpRequest::ParseJson2String(){
+  return ParseJson2String(dom_);
 }
 
+std::string HttpRequest::ParseJson2String(rapidjson::Document & dom){
+  rapidjson::StringBuffer buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+  dom.Accept(writer);
+  return buffer.GetString();
+}
 
-
+rapidjson::Document& HttpRequest::GetDom(){
+  return dom_;
+}

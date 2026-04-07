@@ -10,9 +10,13 @@
 #include<errno.h>
 #include<thread>
 #include<iostream>
+#include<signal.h>
+
 #define READ_BUFFER 1024
 
 TcpServer::TcpServer(const char * ip,const short port){
+  Initial();
+
   main_reactor_ = std::make_unique<EventLoop>();
   acceptor_ = std::make_unique<Acceptor>(main_reactor_.get(), ip, port);
   auto cb = std::bind(&TcpServer::HandleNewConnection, this, std::placeholders::_1);
@@ -27,6 +31,10 @@ TcpServer::~TcpServer(){
   
 }
 
+void TcpServer::Initial(){
+  signal(SIGPIPE, SIG_IGN);
+}
+
 void TcpServer::Start(){
   event_loop_thread_pool_ -> Start();
   main_reactor_->Loop();
@@ -37,7 +45,7 @@ void TcpServer::HandleNewConnection(int sockfd){
   assert(sockfd != -1);
 
   std::shared_ptr<TcpConnection> conn = std::make_shared<TcpConnection>(event_loop_thread_pool_->GetNextLoop(),sockfd, next_connid_);
-  conn->SetOnCloseCallback(std::bind(&TcpServer::HandleCloseConnection, this, std::placeholders::_1, std::placeholders::_2));
+  conn->SetOnCloseCallback(std::bind(&TcpServer::HandleCloseConnection, this, std::placeholders::_1));
   conn->SetOnMessageCallback(on_message_);//自己保留一份，不要用move
   conn->SetOnConnectCallback(on_connect_);
   
@@ -50,13 +58,11 @@ void TcpServer::HandleNewConnection(int sockfd){
   conn->ConnectionEstablished();
 }
 
-void TcpServer::HandleCloseConnection(const std::shared_ptr<TcpConnection> &conn, const std::function<void()> &cb){
-  main_reactor_->RunOneFunc(std::bind(&TcpServer::HandleCloseConnectionInPoller, this, conn, cb));
+void TcpServer::HandleCloseConnection(const std::shared_ptr<TcpConnection> &conn){
+  main_reactor_->RunOneFunc(std::bind(&TcpServer::HandleCloseConnectionInPoller, this, conn));
 } 
 
-void TcpServer::HandleCloseConnectionInPoller(const std::shared_ptr<TcpConnection> &conn, const std::function<void()> &cb){
-  if(cb)cb();
-
+void TcpServer::HandleCloseConnectionInPoller(const std::shared_ptr<TcpConnection> &conn){
   int sockfd = conn->GetFd();
   assert(connections_.count(sockfd));
   connections_.erase(sockfd);

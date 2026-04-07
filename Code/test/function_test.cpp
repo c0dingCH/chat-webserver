@@ -1,16 +1,14 @@
 #include <iostream>
 #include <unistd.h>
 #include "AsyncLogging.h"
+#include "HttpRequest.h"
 using namespace std;
 
 int main(){
-  AsyncLogging as("../tmp.log");
-  as.Start();
-  as.Append("123456789\n", 10);
+  HttpRequest r;
+  r.SetBody("{\"name\":\"cheng\",\"age\":22}");
+  r.ParseJson2Dom();
+  auto &d = r.GetDom(); 
   
-  sleep(10);
-
-  as.Append("123456789", 9);
- 
-  as.Stop();
+  cout<<d["name"].GetString()<<" "<<d["age"].GetInt()<<endl;
 }

@@ -1,7 +1,7 @@
 /*
 http_server_explain:
   auto close connection
-  simple login in
+  login in
   ...  
 
 */
@@ -11,13 +11,17 @@ http_server_explain:
 #include "HttpResponse.h"
 #include "EventLoop.h"
 #include "Logging.h"
+#include "MysqlPool.h"
+#include "Mysql.h"
+
+#include "User.h"
+#include "Transport.h"
 
 #include <fcntl.h>
 #include <dirent.h>
 #include <thread>
 #include <string>
 #include <fstream>
-
 #include <sys/stat.h>
 
 std::string ReadFile(const char * file_path){
@@ -106,112 +110,73 @@ bool DownLoadFile(const std::string & filename, HttpResponse * response){
   struct stat file_state;
   fstat(filefd, &file_state);
  
-  response->SetBodyType(HttpResponse::HttpBodyType::kFile);
+  response->AddHeader("Content-Type","application/octet-stream");
   response->SetFileFd(filefd);
-  response->SetBodyLength(file_state.st_size);
+  response->SetContentLength(file_state.st_size);
   
   return true;
 }
 
 
-void HttpResponseCallback(HttpRequest * request, HttpResponse *response)
-{
-  const auto method = request->GetMethod();
+void HttpResponseCallback(const HttpObjs & hs){
+  const auto method = hs.request->GetMethod();
+  
   if(method != HttpRequest::Method::kGet && method != HttpRequest::Method::kPost){
-    response->SetStatusCode(HttpResponse::HttpStatusCode::k400BadRequest);
-    response->SetStatusMessage("Bad Request");
-    response->SetCloseConnection(true);
+    hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k400BadRequest);
+    hs.response->SetStatusMessage("Bad Request");
+    hs.response->SetCloseConnection(true);
   }
 
   if(method == HttpRequest::Method::kGet){
-    std::string url = request->GetUrl();
+    std::string url = hs.request->GetUrl();
     if(url == "/"){     
       const std::string body = ReadFile("../static/files/index.html"); 
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-      response->SetBody(body);
-      response->SetContentType("text/html");
-    }
-    else if(url == "/msg.html"){
-      const std::string body = ReadFile("../static/files/msg.html"); 
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-      response->SetBody(body);
-      response->SetContentType("text/html");
-    }
-    else if(url == "/cat.jpg"){
-      const std::string body = ReadFile("../static/files/cat.jpg");
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-      response->SetBody(body);
-      response->SetContentType("image/jpeg");
-    }
-    else if(url == "/fileserver"){
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-      response->SetBody(BuildFileHtml());
-      response->SetContentType("text/html");
-    }
-    else if(url.substr(0,7) == "/delete"){
-      std::string file_path = url.substr(8);
-      response->SetContentType("text/html");
-      if(RemoveFile(file_path)){
-        response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-        response->SetBody("remove successfully!");
-      }
-      else{
-        response->SetStatusCode(HttpResponse::HttpStatusCode::k302K);
-        response->SetBody("remove error !");
-      }
+      hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
+      hs.response->SetBody(body);
+      hs.response->AddHeader("Content-Type","text/html");
     }
     else if(url.substr(0,9) == "/download"){
-      if(DownLoadFile(url.substr(10), response)){
-        response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-        response->SetContentType("application/octet-stream");
-        response->SetStatusMessage("Ok!");
+      if(DownLoadFile(url.substr(10), hs.response)){
+        hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
+        hs.response->AddHeader("Content-Type","application/octet-stream");
+        hs.response->SetStatusMessage("Ok!");
       }
       else{
-        response->SetStatusMessage("Moved Temporarily");
-        response->SetStatusCode(HttpResponse::HttpStatusCode::k302K);
-        response->SetBody("Downloading error");
-        response->SetContentType("text/html");
-
+        hs.response->SetStatusMessage("Moved Temporarily");
+        hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k302K);
+        hs.response->SetBody("Downloading error");
+        hs.response->AddHeader("Content-Type","text/html");
       }
     }
     
     else{
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k404NotFound);
-      response->SetStatusMessage("Not Found");
-      response->SetBody("Sorry Not Found\n");
-      response->SetCloseConnection(true);
+      hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k404NotFound);
+      hs.response->SetStatusMessage("Not Found");
+      hs.response->SetBody("Sorry Not Found\n");
+      hs.response->SetCloseConnection(true);
     }
   }
   else if(method == HttpRequest::Method::kPost){
-    if(request->GetUrl().substr(0,7) == "/upload"){
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-      response->SetBody("Upload successfully");
-      response->SetContentType("text/html");
+    if(hs.request->GetUrl().substr(0,7) == "/upload"){
+      hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
+      hs.response->SetBody("Upload successfully");
+      hs.response->AddHeader("Content-Type","text/html");
     }
-    else{
-      const std::string body = request->GetBody();
-    
-      int it_user_begin = body.find("username=") + 9;
-      int it_pass_begin = body.find("password=") + 9;
-      int it_user_end = body.find('&', it_user_begin);
-      int it_pass_end = it_pass_begin;
-
-      int &it = it_pass_end;
-      while(it < static_cast<int>(body.size()) && body[it] != ' ' && body[it] != '\r' && body[it] != '\n') it++;
-    
-      std::string username = body.substr(it_user_begin, it_user_end - it_user_begin);
-      std::string password = body.substr(it_pass_begin, it_pass_end - it_pass_begin);
-
-      if(username == "123123123" && password == "123123123"){
-        response->SetBody("Login ok !");
+    else if(hs.request->GetUrl().substr(0,4) == "/api"){ //注册   
+      if(hs.request->GetUrl().substr(4,5) == "/user"){ //注册   
+        if(hs.request->GetUrl().substr(9,9) == "/register"){ //注册   
+          api::user::HandleRegister(hs);    
+        }
+        else if(hs.request->GetUrl().substr(9,6) == "/login"){//登陆
+          api::user::HandleLogin(hs);    
+        }
+        else if(hs.request->GetUrl().substr(9,8) == "/profile"){//修改
+          api::user::HandleProfile(hs);    
+        }
+      }  
+      else if(hs.request->GetUrl().substr(4,10) == "/transport"){ //注册   
+        api::transport::HandleMessage(hs);
       }
-      else{
-        response->SetBody("Login unsuccessfully !");
-      }
-
-      response->SetStatusCode(HttpResponse::HttpStatusCode::k200K);
-      response->SetStatusMessage("OK");
-      response->SetContentType("text/plain");
     }
   }
   return;

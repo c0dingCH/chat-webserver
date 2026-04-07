@@ -21,6 +21,7 @@ std::unique_ptr<Mysql> MysqlPool::Get(){
   {
     std::unique_lock<std::mutex>lock(mtx_);
     cv_.wait(lock,[&](){ return !conns_.empty(); });
+  
     conn = std::move(conns_.front());
     conns_.pop();
   }

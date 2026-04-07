@@ -5,6 +5,80 @@
 #include <netdb.h>
 #include <cstring>
 #include <fstream>
+#include <sstream>
+#include <thread>
+std::string id;
+
+void func1(std::string & req){
+  std::cout<<"Login:"<<std::endl;
+  std::string username, password;
+  std::cout <<"请输入用户名: ";
+  std::cin >> username;
+  std::cout <<"请输入密码: ";
+  std::cin >> password;
+  std::ostringstream body;
+  body << "{"
+       << "\"username\":\"" << username << "\","
+       << "\"password\":\"" << password << "\""
+       << "}";
+  req.replace(req.find("body"),4,body.str());
+  req.replace(req.find("length"), 6,std::to_string(body.str().size()));
+  req.replace(req.find("url"), 3, "/api/user/login");
+  id = username;
+}
+
+void func2(std::string & req){
+  std::cout<<"Register:"<<std::endl;
+  std::string username, password;
+  std::cout <<"请输入用户名: ";
+  std::cin >> username;
+  std::cout <<"请输入密码: ";
+  std::cin >> password;
+  std::ostringstream body;
+  body << "{"
+       << "\"username\":\"" << username << "\","
+       << "\"password\":\"" << password << "\""
+       << "}";
+  req.replace(req.find("body"),4,body.str());
+  req.replace(req.find("length"), 6, std::to_string(body.str().size()));
+  req.replace(req.find("url"), 3, "/api/user/register");
+}
+
+void func3(std::string &req){
+  std::cout<<"Profile:"<<std::endl;
+  std::string username, password;
+  std::cout <<"请输入用户名: ";
+  std::cin >> username;
+  std::cout <<"请输入密码: ";
+  std::cin >> password;
+  std::ostringstream body;
+  body << "{"
+       << "\"username\":\"" << username << "\","
+       << "\"password\":\"" << password << "\""
+       << "}";
+  req.replace(req.find("body"),4,body.str());
+  req.replace(req.find("length"), 6,std::to_string(body.str().size()));
+  req.replace(req.find("url"), 3, "/api/user/profile");
+}
+
+void func4(std::string &req){
+  std::string username, msg;
+  std::cout <<"请输入用户名: ";
+  std::cin >> username;
+  std::cout <<"请输入msg: ";
+  std::cin>> msg;
+
+  std::ostringstream body;
+  body << "{"
+       << "\"content\":\"" << msg << "\""
+       << "}";
+  req.replace(req.find("body"),4,body.str());
+  req.replace(req.find("length"), 6,std::to_string(body.str().size()));
+  req.replace(req.find("url"), 3, "/api/transport");
+  req.replace(req.find("sender_id"),9 , id);
+  req.replace(req.find("reciever_id"),11 ,username);
+}
+
 int main() {
     const char* host = "0.0.0.0";   
     int port = 8888;                  
@@ -29,48 +103,49 @@ int main() {
         close(sockfd);
         return -1;
     }
-	  std::string request = "GET /  HTTP/1.1\r\n"
-					  "Host: 127.0.0.1:1234\r\n"
-					  "Connection: keep-alive\r\n"
-					  "Cache-Control: max-age=0\r\n"
-					  "sec-ch-ua: \"Google Chrome\";v=\"113\", \"Chromium\";v=\"113\", \"Not-A.Brand\";v=\"24\"\r\n"
-					  "sec-ch-ua-mobile: ?0\r\n"
-					  "sec-ch-ua-platform: \"Linux\"\r\n"
-					  "Upgrade-Insecure-Requests: 1\r\n"
-					  "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36\r\n"
-					  "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7\r\n"
-					  "Sec-Fetch-Site: none\r\n"
-					  "Sec-Fetch-Mode: navigate\r\n"
-					  "Sec-Fetch-User: ?1\r\n"
-					  "Sec-Fetch-Dest: document\r\n"
-					  "Accept-Encoding: gzip, deflate, br\r\n"
-					  "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8,zh-TW;q=0.7\r\n"
-					  "Cookie: username-127-0-0-1-8888=\"2|1:0|10:1681994652|23:username-127-0-0-1-8888|44:Yzg5ZjA1OGU0MWQ1NGNlMWI2MGQwYTFhMDAxYzY3YzU=|6d0b051e144fa862c61464acf2d14418d9ba26107549656a86d92e079ff033ea\"; _xsrf=2|dd035ca7|e419a1d40c38998f604fb6748dc79a10|168199465\r\n"
-					  "\r\n"
-            "username=123123123&pastatstatstatssword=12312312";
-//      std::string request = "POST /upload HTTP/1.1\r\n"
-//              "Host: localhost:8080\r\n"
-//              "Content-Type: multipart/form-data; boundary=----WebKitFormBoundary123456\r\n"
-//              "Content-Length: 207\r\n"
-//              "\r\n"
-//              "------WebKitFormBoundary123456\r\n"
-//              "Content-Disposition: form-data; name=\"file\"; filename=\"hello.txt\"\r\n"
-//              "Content-Type: text/plain\r\n"
-//              "\r\n"
-//              "Hello, this is the file content.\r\n"
-//              "It is written by hand.\r\n"
-//              "------WebKitFormBoundary123456--\r\n";
+    
+    std::string demo = "POST url HTTP/2.0\r\n"
+      "Content-Type: application/json\r\n"
+      "Content-Length: length\r\n"
+      "Sender_id: sender_id\r\n"
+      "Reciever_id: reciever_id\r\n"
+      "\r\n"
+      "body";
 
-    // 5. 发送请求
-    send(sockfd, request.c_str(), request.size(), 0);
+    std::thread th([&sockfd](){
+      while(1){
+        char buffer[4096];
+        int n;
+        n = recv(sockfd, buffer, sizeof(buffer)-1, 0); 
+        buffer[n] = '\0';
+        std::cout <<buffer << std::endl;
+      }
+    });
 
-    // 6. 接收响应
-    char buffer[4096];
-    int n;
-    while ((n = recv(sockfd, buffer, sizeof(buffer)-1, 0)) > 0) {
-      buffer[n] = '\0';
-      std::cout << buffer;
+    std::cout<<"登陆1，注册2，修改密码3, 发消息4 ："<<std::endl;
+    while(1){
+      // 5. 发送请求
+      std::string req = demo;
+      int chose = 0;
+      std::cin>>chose;
+
+      switch(chose){
+        case 1: func1(req); break;
+        case 2: func2(req); break;
+        case 3: func3(req); break;
+        case 4: func4(req); break;
+      }
+      if(chose > 4 || chose < 1){
+        std::cout<<"无效选择"<<std::endl;
+        continue;
+      }
+      std::cout<<req<<std::endl; 
+      send(sockfd, req.c_str(), req.size(), 0);
+
+      // 6. 接收响应
+      
     }
+
 
 
     // 7. 关闭 socket

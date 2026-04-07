@@ -13,9 +13,9 @@ class HttpContext;
 class TcpConnection : public std::enable_shared_from_this<TcpConnection>{
 public:
   enum State{
-    Invalid = 1,
-    Connected,
-    Closed
+    kInvalid = 1,
+    kConnected,
+    kClosed
   };
 
   TcpConnection(EventLoop * loop, int connfd, int connid);
@@ -25,20 +25,16 @@ public:
   void ConnectionEstablished();
   void ConnectionDestructor();
 
-  void SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>, const std::function<void()> )> &cb);
+  void SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> &cb);
   void SetOnMessageCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> & cb);
   void SetOnConnectCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> & cb);
-  void SetOnCloseBusi(const std::function<void()> & cb);
+  void SetOnCloseBusi(const std::function<void()> & cb); // 虽然这里写了一个对外开放的接口，但是没用上
   void SetTimeStamp(TimeStamp timestamp);
 
   void Read();
-  void Write();
   void Send(const char * msg);
-  void Send(const char * msg,int len);
   void Send(const std::string & msg);
-  void SendInLoop(const char * msg);
-  void SendInLoop(const char * msg,int len);
-  void SendInLoop(const std::string & msg);
+  void SendInLoop(const std::string &msg);
   void SendFile(int filefd, int siz);  
 
   Buffer * GetReadBuffer() const;
@@ -59,23 +55,22 @@ private:
   EventLoop * loop_{nullptr};
   int connfd_{-1};
   int connid_{-1};
-  State state_{State::Invalid};
+  State state_{State::kInvalid};
   
 
   std::unique_ptr<Channel> channel_;
   std::unique_ptr<Buffer> read_buffer_;
   std::unique_ptr<Buffer> send_buffer_;
 
-  std::function<void(const std::shared_ptr<TcpConnection>, const std::function<void()>)> on_close_;
+  std::function<void(const std::shared_ptr<TcpConnection>)> on_close_;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_message_;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_connect_;
   std::function<void()>on_close_busi_;
 
   void ReadNonBlocking();
-  void WriteNonBlocking();
 
   std::unique_ptr<HttpContext>context_;  
   
   TimeStamp timestamp_;
-
+  bool fault_error_{false};
 };

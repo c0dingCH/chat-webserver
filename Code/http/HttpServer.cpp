@@ -20,17 +20,18 @@ HttpServer::HttpServer(const char * ip, const short & port){
   server_ = std::make_unique<TcpServer>(ip, port);
   server_ -> OnConnect(std::bind(&HttpServer::OnConnection, this, std::placeholders::_1));
   server_ -> OnMessage(std::bind(&HttpServer::OnMessage, this, std::placeholders::_1));
-  SetHttpCallback(std::bind(&HttpServer::HttpDefaultCallback, this,std::placeholders::_1, std::placeholders::_2));
+  SetHttpCallback(std::bind(&HttpServer::HttpDefaultCallback, this,std::placeholders::_1));
+  mysql_pool_ = std::make_unique<MysqlPool>();
 }
 
 HttpServer::~HttpServer(){
   
 }
 
-void HttpServer::HttpDefaultCallback(HttpRequest * request, HttpResponse * response){
-  response->SetStatusCode(HttpResponse::HttpStatusCode::k404NotFound);
-  response->SetStatusMessage("Not Found");
-  response->SetCloseConnection(true);
+void HttpServer::HttpDefaultCallback(const HttpObjs & hs){
+  hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k404NotFound);
+  hs.response->SetStatusMessage("Not Found");
+  hs.response->SetCloseConnection(true);
 }
 
 
@@ -44,11 +45,10 @@ void HttpServer::OnConnection(const TcpConnectionPtr & conn){
   socklen_t len = sizeof addr;
   getpeername(conn->GetFd(), (sockaddr *)&addr, &len);
 
-//  std::cout <<  CurrentThread::tid()
-//            <<  " EchoServer::OnNewConnection : new connection"
-//            <<  " fd[#"<< conn->GetFd()<<"]"
-//            <<  " from "<< inet_ntoa(addr.sin_addr)<<":"<<ntohs(addr.sin_port)
-//            <<  std::endl;
+  LOG_INFO  <<  CurrentThread::tid()
+            <<  " EchoServer::OnNewConnection : new connection"
+            <<  " fd[#"<< conn->GetFd()<<"]"
+            <<  " from "<< inet_ntoa(addr.sin_addr)<<":"<<ntohs(addr.sin_port);
 
   if(auto_close_conn_){
     auto loop = conn->GetLoop();
@@ -57,11 +57,11 @@ void HttpServer::OnConnection(const TcpConnectionPtr & conn){
 }
 
 void HttpServer::OnMessage(const TcpConnectionPtr &conn){
-  if(conn->GetState() == TcpConnection::State::Connected){
+  if(conn->GetState() == TcpConnection::State::kConnected){
     HttpContext * context = conn->GetContext();
     if(!context->ParseRequest(conn->GetReadBuffer()->beginread(), conn->GetReadBuffer()->readablebytes())){
       conn->Send("HTTP/1.1 400 Bad Request \r\n\r\n");
-      conn->HandleClose();
+      HandleCloseConnection(conn);
     }
     if(context->GetCompleteRequest()){
       Onrequest(conn, context->GetRequest());
@@ -71,9 +71,12 @@ void HttpServer::OnMessage(const TcpConnectionPtr &conn){
 }
 
 void HttpServer::Onrequest(const TcpConnectionPtr & conn, HttpRequest * request){
+  //长连接
   std::string connection_state = request->GetHeader("Connection");
-  bool close = connection_state == "Close" ||
-                ( request->GetVersion() == HttpRequest::Version::kHttp10 && connection_state != "keep-alive" );
+  bool close = (
+      strcasecmp(connection_state.c_str(),"close") == 0 ||
+      (request->GetVersion() == HttpRequest::Version::kHttp10 && connection_state != "keep-alive" )
+  );
   
   if(request->GetHeader("Content-Type").find("multipart/form-data") != std::string::npos){
     size_t it_boundary = request->GetHeader("Content-Type").find("boundary=");
@@ -97,18 +100,16 @@ void HttpServer::Onrequest(const TcpConnectionPtr & conn, HttpRequest * request)
       of.close();
     }
   }
-
   HttpResponse response(close);
- 
-  response_(request, &response);
+  response_({conn, this, request, &response});
   
   // 这里只判断html 和 file 两种
-  if(response.GetBodyType() == HttpResponse::HttpBodyType::kHtml){
-    conn->SendInLoop(response.GetMessage().c_str());
+  if(response.GetHeader("Content-Type") == "text/html"){
+    conn->Send(response.GetMessage());
   }
   else{
     conn->Send(response.GetBeforeBody());
-    conn->SendFile(response.GetFileFd(),response.GetBodyLength());
+    conn->SendFile(response.GetFileFd(),response.GetContentLength());
       
     if(::close(response.GetFileFd()) == -1){
       LOG_ERROR<< "Close File Error";
@@ -120,7 +121,7 @@ void HttpServer::Onrequest(const TcpConnectionPtr & conn, HttpRequest * request)
   }
 
   if(response.IsInCloseConnection()){
-    conn->HandleClose();
+    HandleCloseConnection(conn);
   }
 }
 
@@ -132,15 +133,15 @@ void HttpServer::ActiveCloseConn(const std::weak_ptr<TcpConnection> & weak_ptr){
       loop -> RunAt(TimeStamp::AddTime(conn->GetTimeStamp(),AUTOCLOSETIMEOUT), std::bind(&HttpServer::ActiveCloseConn, this, weak_ptr));
     } 
     else{
-      conn->HandleClose();
+      HandleCloseConnection(conn);
     }
   }
 }
 
 
 void HttpServer::Start(){
-  server_->Start();
   mysql_pool_->Start();
+  server_->Start();
 }
 
 void HttpServer::SetThreadNums(const int & thread_nums){
@@ -155,7 +156,36 @@ void HttpServer::SetAutoCloseConn(bool auto_close){
   auto_close_conn_ = auto_close;
 }
 
+void HttpServer::AddConn(const std::string &id, const TcpConnectionPtr &conn){
+  std::unique_lock<std::mutex>lock(mtx_);
+  id_conn_[id] = conn;
+}
 
+void HttpServer::RemoveConn(const std::string &id){
+  //LOG_INFO << id_conn_.size();
+  std::unique_lock<std::mutex>lock(mtx_);
+  if(id_conn_.count(id)){
+    id_conn_.erase(id);
+  }
+  else{
+    LOG_ERROR << "No such id login !";
+  }
+  //LOG_INFO << id_conn_.size();
+}
 
+HttpServer::TcpConnectionPtr HttpServer::GetConn(const std::string &id){
+  std::unique_lock<std::mutex>lock(mtx_);
+  if(!id_conn_.count(id))return nullptr;
+  else return id_conn_[id];
+}
 
+void HttpServer::HandleCloseConnection(const TcpConnectionPtr & conn){
+  const std::string & id = conn->GetContext()->GetRequest()->GetDom()["username"].GetString();
+  RemoveConn(id);
+  conn->HandleClose();
+}
+
+std::unique_ptr<MysqlPool>& HttpServer::GetMysqlPool(){
+  return mysql_pool_;
+}
 
