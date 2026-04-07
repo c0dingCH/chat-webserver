@@ -1,3 +1,8 @@
+> 简介：基于linux网络库开发chat软件， tcp + http2.0 + mysql8 + redies + webSocket + 客户端 + docker(maybe用来部署)
+#chat项目正在进行中， 以下为网络层的介绍
+
+
+
 ### 主架构  
 **Tcp** ： Reactor 主从模式 ， 事件驱动模型    
 
