@@ -80,7 +80,6 @@ void Buffer::Retrieve(size_t len){
     read_index_ += len;
 }
 std::string Buffer::RetrieveAsString(size_t len){
-  std::cout<<read_index_ <<" "<<write_index_ << std::endl;
     assert(read_index_ + len <= write_index_);
     std::string ret = PeekAsString(len);
     Retrieve(len);

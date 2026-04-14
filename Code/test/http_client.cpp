@@ -173,14 +173,24 @@ void recv(int sockfd){
 
       nghttp2_session_mem_recv(session,(const uint8_t * )buf, n);
       
-      //write(sockfd, msg.c_str(), msg.size());
       std::cout<<"shake hand ok !"<<std::endl;
+      
+      nghttp2_nv nva[4];
+      nva[0] = {(uint8_t *)":method", (uint8_t *)"POST", strlen(":method"), strlen("POST"), NGHTTP2_NV_FLAG_NONE};
+      nva[1] = {(uint8_t *)":scheme", (uint8_t *)"http", strlen(":scheme"), strlen("http"), NGHTTP2_NV_FLAG_NONE};
+      nva[2] = {(uint8_t *)":authority", (uint8_t *)"0.0.0:8888", strlen(":authority"), strlen("0.0.0:8888"), NGHTTP2_NV_FLAG_NONE};
+      nva[3] = {(uint8_t *)":path", (uint8_t *)"/push_stream", strlen(":path"), strlen("/push_stream"), NGHTTP2_NV_FLAG_NONE};
+      nghttp2_submit_request(session, nullptr, nva, 4, nullptr, nullptr);
+      nghttp2_session_send(session);
+      
+      write(sockfd, msg.c_str(), msg.size());
+      
       continue;
     }
 
    
     int n = read(sockfd,buf,sizeof buf);
-    for(int i = 0;i < n;i++)printf("%02X ", buf[i]);
+    //for(int i = 0;i < n;i++)printf("%02X ", buf[i]);
     //puts("");
    
 

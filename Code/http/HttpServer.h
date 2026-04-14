@@ -58,7 +58,9 @@ public:
 
   void Send(const TcpConnectionPtr & conn, HttpResponse * response); 
 
+  std::string GetAuthority() const;
 private:
+  std::string authority_;
   std::unique_ptr<TcpServer> server_;
   std::unique_ptr<MysqlPool> mysql_pool_;
   bool auto_close_conn_{false};
@@ -67,4 +69,5 @@ private:
   std::unordered_map<std::string,TcpConnectionPtr >id_conn_;
 
   std::mutex mtx_;
+  
 };

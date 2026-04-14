@@ -96,6 +96,7 @@ static int on_frame_recv_callback(nghttp2_session * session,
 static int on_begin_headers_callback(nghttp2_session * session, const nghttp2_frame * frame, void *user_data){
 //  puts("On begin header");
   auto context = static_cast<HttpContext *>(user_data);
+  if(!context -> current_id_)context -> push_id_ = frame -> hd.stream_id;
   context -> current_id_ = frame->hd.stream_id;
   context -> AddStream();
   return 0;
@@ -147,7 +148,6 @@ static int on_stream_close_callback(nghttp2_session * session,
                              int32_t stream_id,
                              uint32_t error_code,
                              void * user_data){
-  puts("on_stream_close_callback");
   auto context = static_cast<HttpContext *>(user_data);
   context -> current_id_ = stream_id;
   context -> RemoveStream();
@@ -194,7 +194,6 @@ void HttpContext::ParseRequest(const char * msg, size_t len){
   if(handshake_done_ == 0){
     nghttp2_submit_settings(session_.get(), NGHTTP2_FLAG_NONE, nullptr, 0);
   }
-  
 
   size_t offset = 0;
   int n = 0;
@@ -212,6 +211,7 @@ void HttpContext::ParseRequest(const char * msg, size_t len){
     if(current_id_)handshake_done_ = 2;
     else nghttp2_session_send(session_.get());
   }
+
   nghttp2_session_send(session_.get());
 }
 
@@ -223,6 +223,7 @@ void HttpContext::AddStream(){
 }
 
 void HttpContext::RemoveStream(){
+  if(current_id_ % 2 == 0)return ; // this is push_stream_id
   auto it = requests_.find(current_id_);
   if(it == requests_.end()){
     LOG_ERROR << "stream remove error";
@@ -265,3 +266,4 @@ std::string HttpContext::GetMessage() const{
 bool HttpContext::GetParseStatus() const{
   return parse_status_;
 }
+

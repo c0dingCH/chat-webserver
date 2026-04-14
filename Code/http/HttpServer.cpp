@@ -17,6 +17,7 @@
 #include<fstream>
 
 HttpServer::HttpServer(const char * ip, const short & port){
+  authority_ = ip + std::string(":",1) + std::to_string(port);
   server_ = std::make_unique<TcpServer>(ip, port);
   server_ -> OnConnect(std::bind(&HttpServer::OnConnection, this, std::placeholders::_1));
   server_ -> OnMessage(std::bind(&HttpServer::OnMessage, this, std::placeholders::_1));
@@ -104,8 +105,6 @@ void HttpServer::Onrequest(const TcpConnectionPtr & conn, HttpRequest * request)
 
   HttpResponse response(close);
   response_({conn, this, request, &response});
- 
-  LOG_INFO << "response ok!" ;
 
   if(response.GetHeader("content-type") == "text/html"){
     Send(conn ,&response);
@@ -195,5 +194,9 @@ void HttpServer::Send(const TcpConnectionPtr & conn, HttpResponse * response){
   auto context = conn -> GetContext();
   response->ParseResponse(context->GetSession(), context->current_id_);
   conn->Send(context->GetMessage());
+}
+
+std::string HttpServer::GetAuthority() const{
+  return authority_;
 }
 

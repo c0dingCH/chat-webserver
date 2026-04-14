@@ -29,6 +29,7 @@ public:
 
   void SetBody(const std::string & body);
 
+  int PushPromise(nghttp2_session * session, int push_id, const std::string method, const std::string scheme, const std::string authority, const std::string path);
   void ParseResponse(nghttp2_session * session, int stream_id);
   //std::string GetBeforeBody();
 

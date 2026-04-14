@@ -1,6 +1,7 @@
 #include"HttpResponse.h"
 #include"Buffer.h"
 #include"HttpContext.h"
+#include"Logging.h"
 
 #include<vector>
 #include<cstring>
@@ -58,9 +59,26 @@ bool HttpResponse::IsInCloseConnection(){
   return close_connection_;
 } 
 
+
+int HttpResponse::PushPromise(nghttp2_session * session, int push_id, const std::string method, const std::string scheme, const std::string authority, const std::string path){
+  nghttp2_nv nva[4];
+  nva[0] = nghttp2_nv{ (uint8_t *)":method", (uint8_t *)method.data(), strlen(":method"), method.size(), NGHTTP2_NV_FLAG_NONE };
+  nva[1] = nghttp2_nv{ (uint8_t *)":scheme", (uint8_t *)scheme.data(), strlen(":scheme"), scheme.size(), NGHTTP2_NV_FLAG_NONE };
+  nva[2] = nghttp2_nv{ (uint8_t *)":authority", (uint8_t *)authority.data(), strlen(":authority"), authority.size(), NGHTTP2_NV_FLAG_NONE };
+  nva[3] = nghttp2_nv{ (uint8_t *)":path", (uint8_t *)path.data(), strlen(":path"), path.size(), NGHTTP2_NV_FLAG_NONE };
+  
+  int push_stream_id = nghttp2_submit_push_promise(session, NGHTTP2_FLAG_NONE, push_id , nva, 4, nullptr);
+
+  if(push_stream_id < 0){
+    LOG_ERROR << "Push promise error " ;
+  }
+
+  return push_stream_id;
+}
+
+
 void HttpResponse::ParseResponse(nghttp2_session * session, int stream_id){
   std::vector<nghttp2_nv>nvs;
-
   for(const auto &header : headers_){
     nvs.push_back(nghttp2_nv{
       (uint8_t *)header.first.data(), (uint8_t *)header.second.data(),

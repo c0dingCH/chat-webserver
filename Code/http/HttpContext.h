@@ -33,6 +33,9 @@ public:
   
   void AddStream();
   int current_id_{0};
+  int push_id_{0};
+  //后续session析构会自动清理push_id
+  
 private:
 
   std::map<int,std::unique_ptr<HttpRequest> >requests_;
