@@ -33,6 +33,7 @@ public:
 
   void Read();
   void Send(const char * msg);
+  void Send(const char * msg, int len);
   void Send(const std::string & msg);
   void SendInLoop(const std::string &msg);
   void SendFile(int filefd, int siz);  
@@ -73,4 +74,6 @@ private:
   
   TimeStamp timestamp_;
   bool fault_error_{false};
+
+
 };

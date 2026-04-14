@@ -1,76 +1,49 @@
 #pragma once
-#include <string>
-#include <map>
-#include <rapidjson/document.h>
+#include<string>
+#include<map>
+#include<memory>
+#include<rapidjson/document.h>
+
+class Buffer;
 
 class HttpRequest{
 public:
-    enum Method
-    {
-        kInvalid = 0,
-        kGet,
-        kPost,
-        kHead,
-        kPut,
-        kDelete
-    };
-    enum Version
-    {
-        kUnknown = 0,
-        kHttp10,
-        kHttp11,
-        kHttp20,
-        kHttp30
-    };
 
-    HttpRequest();
-    ~HttpRequest();
+  enum HttpRequestStatus{
+    kStart,
+    kHeader,
+    kData, 
+    kComplete,
+    kClose,
+    kFaild
+  };
 
-    void SetVersion(const std::string &ver); // http版本
-    Version GetVersion() const;
-    std::string GetVersionString() const;
+  HttpRequest(int stream_id);
+  ~HttpRequest();
 
-    bool SetMethod(const std::string &method); // 设定请求方法
-    Method GetMethod() const;
-    std::string GetMethodString() const ;
+  void AddHeader(const std::string &field, const std::string &value); 
+  std::string GetHeader(const std::string &field) const;
 
-    void SetUrl(const std::string &url); // 请求路径
-    const std::string & GetUrl() const;
+//const uint8_t * GetBody() const;
+  void Append(const uint8_t * data, size_t len);
+  
+  HttpRequestStatus GetRequestStatus();
+  void SetRequestStatus(const HttpRequestStatus status);
 
-    void SetRequestParams(const std::string &key, const std::string &value);
-    std::string GetRequestValue(const std::string &key) const;
-    const std::map<std::string, std::string> & GetRequestParams() const;
-    
-    void SetProtocol(const std::string &str);
-    const std::string & GetProtocol() const;
+//json
+  void ParseJson2Dom();
+  std::string ParseJson2String();
+  std::string ParseJson2String(rapidjson::Document & dom);
+  rapidjson::Document& GetDom();
 
-    void AddHeader(const std::string &field, const std::string &value); // 添加请求体
-    std::string GetHeader(const std::string &field) const;
-    const std::map<std::string, std::string> & GetHeaders() const;
-
-    void SetBody(const std::string &str);
-    const std::string & GetBody() const;
-
-    //void AddBody(const std::string &key, const std::string &value);
-   // const std::string GetBody(const std::string &key) const;
-    
-    void ParseJson2Dom();
-    std::string ParseJson2String();
-    std::string ParseJson2String(rapidjson::Document & dom);
-    rapidjson::Document& GetDom();
 private:
-    Method method_; // 请求方法
-    Version version_; // 版本
+  HttpRequestStatus status_{HttpRequestStatus::kStart};
+  int stream_id_{-1};
+  
 
-    std::map<std::string, std::string> request_params_; // 请求参数
-
-    std::string url_; // 请求路径
-
-    std::string protocol_;
-
-    std::map<std::string, std::string> headers_; // 请求头
-    std::string body_; // 请求体    
-                       //
-   // std::map<std::string,std::string>bodys_;
-    rapidjson::Document dom_;
+//head
+  std::map<std::string, std::string> headers_; 
+//body
+  rapidjson::Document dom_;
+  std::unique_ptr<Buffer> buffer_;
 };

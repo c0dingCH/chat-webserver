@@ -37,7 +37,7 @@ void Buffer::Append(const char* msg) {
     Append(msg, strlen(msg));
 }
 
-void Buffer::Append(const char* msg, int len) {
+void Buffer::Append(const char* msg, size_t len) {
     EnsureWritableBytes(len);
     memcpy(beginwrite(), msg, len);
     write_index_ += len;
@@ -48,13 +48,13 @@ void Buffer::Append(const std::string& msg) {
 }
 
 
-int Buffer::readablebytes() const { 
+size_t Buffer::readablebytes() const { 
   return write_index_ - read_index_; 
 }
-int Buffer::writablebytes() const { 
-  return static_cast<int>(buffer_.size()) - write_index_; 
+size_t Buffer::writablebytes() const { 
+  return buffer_.size() - write_index_; 
 } 
-int Buffer::prependablebytes() const { 
+size_t Buffer::prependablebytes() const { 
   return read_index_; 
 }
 
@@ -65,21 +65,22 @@ const char *Buffer::Peek() const {
   return beginread(); 
 }
 
-std::string Buffer::PeekAsString(int len){
+std::string Buffer::PeekAsString(size_t len){
     return std::string(beginread(), beginread() + len);
 }
 
 std::string Buffer::PeekAllAsString(){
-    return std::string(beginread(), beginwrite());
+  return std::string(beginread(), beginwrite());
 }
 
 //返回值move赋值 在编译器中已经有优化了，不用手动move
 
-void Buffer::Retrieve(int len){
+void Buffer::Retrieve(size_t len){
     assert(readablebytes() >= len);
     read_index_ += len;
 }
-std::string Buffer::RetrieveAsString(int len){
+std::string Buffer::RetrieveAsString(size_t len){
+  std::cout<<read_index_ <<" "<<write_index_ << std::endl;
     assert(read_index_ + len <= write_index_);
     std::string ret = PeekAsString(len);
     Retrieve(len);
@@ -88,7 +89,7 @@ std::string Buffer::RetrieveAsString(int len){
 
 
 void Buffer::RetrieveUntil(const char *end){
-  int len = end - beginread();  
+  size_t len = end - beginread();  
   assert(len >= 0);
   read_index_ += len;
 }
@@ -105,7 +106,7 @@ void Buffer::RetrieveAll(){
     read_index_ = write_index_;
 }
 std::string Buffer::RetrieveAllAsString(){
-    assert(readablebytes() > 0);
+    assert(readablebytes() >= 0);
     std::string ret = PeekAllAsString();
     RetrieveAll();
     return ret;
@@ -113,7 +114,7 @@ std::string Buffer::RetrieveAllAsString(){
 
 
 
-void Buffer::EnsureWritableBytes(int len){
+void Buffer::EnsureWritableBytes(size_t len){
     if(writablebytes() >= len)
         return;
     if(writablebytes() + prependablebytes() >= kPrePendIndex + len){

@@ -3,8 +3,8 @@
 #include<vector>
 #include"Common.h"
 
-static const int kInitialSize = 1024;
-static const int kPrePendIndex = 8;
+static const size_t kInitialSize = 1024;
+static const size_t kPrePendIndex = 8;
 
 class Buffer{
 public:
@@ -24,21 +24,21 @@ public:
 
 
   void Append(const char *message);
-  void Append(const char *message, int len);
+  void Append(const char *message, size_t len);
   void Append(const std::string &message);
 
-  int readablebytes() const;
-  int writablebytes() const;
-  int prependablebytes() const;
+  size_t readablebytes() const;
+  size_t writablebytes() const;
+  size_t prependablebytes() const;
 
 
   char *Peek();
   const char *Peek() const;
-  std::string PeekAsString(int len);
+  std::string PeekAsString(size_t len);
   std::string PeekAllAsString();
 
-  void Retrieve(int len);
-  std::string RetrieveAsString(int len);
+  void Retrieve(size_t len);
+  std::string RetrieveAsString(size_t len);
 
   void RetrieveAll();
   std::string RetrieveAllAsString();
@@ -47,12 +47,12 @@ public:
   std::string RetrieveUntilAsString(const char *end);
 
 
-  void EnsureWritableBytes(int len);
+  void EnsureWritableBytes(size_t len);
 
 private:
   std::vector<char> buffer_;
-  int read_index_;
-  int write_index_;
+  size_t read_index_;
+  size_t write_index_;
   
 };
 

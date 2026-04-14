@@ -119,7 +119,11 @@ void TcpConnection::Read(){
 }
 
 void TcpConnection::Send(const char * msg){
-  Send(std::string(msg));
+  Send(msg,(int)strlen(msg));
+}
+
+void TcpConnection::Send(const char * msg, int len){
+  Send(std::string(msg,len));
 }
 
 void TcpConnection::Send(const std::string & msg){ // Send 安全问题，在RunOneFunc里面有控制到，自己线程直接跑，别的线程串行跑,用回调排队还能防止其他线程串行等待 

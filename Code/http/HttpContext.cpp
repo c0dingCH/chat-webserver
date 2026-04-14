@@ -1,276 +1,267 @@
-#include "HttpContext.h"
-#include "HttpRequest.h"
-#include <memory>
-#include <string>
-#include <algorithm>
-#include <iostream>
+#include"HttpContext.h"
+#include"HttpRequest.h"
+#include"Logging.h"
+#include"Buffer.h"
 
-HttpContext::HttpContext() :state_(HttpRequestParseState::START){
-    request_ = std::make_unique<HttpRequest>();
+#include<memory>
+#include<iostream>
+#include<nghttp2/nghttp2.h>
+
+static int on_invalid_frame_recv(nghttp2_session *session,
+                                 const nghttp2_frame *frame,
+                                 int lib_error_code,
+                                 void *user_data) {
+    printf("Invalid frame received!\n");
+    printf("  Type:        %d\n", frame->hd.type);
+    printf("  Stream ID:   %d\n", frame->hd.stream_id);
+    printf("  Flags:       0x%02x\n", frame->hd.flags);
+    printf("  Error code:  %d (%s)\n", lib_error_code, nghttp2_strerror(lib_error_code));
+
+    return 0; 
 }
 
-HttpContext::~HttpContext(){
-};
-
-
-bool HttpContext::GetCompleteRequest(){
-    return state_ == HttpRequestParseState::COMPLETE;
+static ssize_t on_send_callback(nghttp2_session * session, const uint8_t * data, size_t length, int flags, void * user_data){
+  static_cast<HttpContext *>(user_data) -> Append((const char *)data, length);
+  return length;
 }
 
-void HttpContext::ResetContextStatus(){
-    state_ = HttpRequestParseState::START;
-}
 
-bool HttpContext::ParseRequest(const char *begin, int size){
+static int on_frame_recv_callback(nghttp2_session * session, 
+                                        const nghttp2_frame * frame, 
+                                        void * user_data){
+//
+//  puts("On frame");
+//  if(frame->hd.type == NGHTTP2_SETTINGS){
+//    puts("On settings");
+//  }
+//  else if(frame->hd.type == NGHTTP2_HEADERS){
+//    puts("On headers");
+//  }
+//  else if(frame->hd.type == NGHTTP2_DATA){
+//    puts("On data");
+//  }
+//  else if(frame->hd.type == NGHTTP2_GOAWAY){
+//    puts("On goaway");
+//  }
+//  else if(frame->hd.type == NGHTTP2_PING){
+//    puts("On ping");
+//  }
+//  else if(frame->hd.type == NGHTTP2_WINDOW_UPDATE){
+//    puts("On window update");
+//  }
+//  else if(frame->hd.type == NGHTTP2_RST_STREAM){
+//    puts("On rst stream");
+//  }
+//  else if(frame->hd.type == NGHTTP2_PRIORITY){
+//    puts("On priority");
+//  }
+//  else if(frame->hd.type == NGHTTP2_CONTINUATION){
+//    puts("On continuation");
+//  }
+//  else if(frame->hd.type == NGHTTP2_PUSH_PROMISE){
+//    puts("On push promise");
+//  }
+//  else if(frame->hd.type == NGHTTP2_ALTSVC){
+//    puts("On alt svc");
+//  }
+//  else if(frame->hd.type == NGHTTP2_ORIGIN){
+//    puts("On origin");
+//  }
+//
 
-    char *start = const_cast<char *>(begin);
-    char *end = start;
-    char *colon = end; 
-    while(state_ != HttpRequestParseState::kINVALID 
-        && state_ != HttpRequestParseState::COMPLETE
-        && end - begin <= size){
-
-        char ch = *end; // 当前字符
-        //std::cout << ch;
-        switch (state_){
-            case HttpRequestParseState::START:{ 
-                if(ch == CR || ch== LF || isblank(ch)){
-                    // 遇到空格，换行和回车都继续。
-                }else if(isupper(ch)){
-                    // 遇到大写字母，说明遇到了METHOD
-                    state_ = HttpRequestParseState::METHOD;
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-            case HttpRequestParseState::METHOD:{
-                if(isupper(ch)){
-                    // 如果是大写字母，则继续
-                }else if(isblank(ch)){
-                    // 遇到空格表明，METHOD方法解析结束，当前处于即将解析URL，start进入下一个位置
-                    request_->SetMethod(std::string(start, end));
-                    state_ = HttpRequestParseState::BEFORE_URL;
-                    start = end + 1; // 更新下一个指标的位置
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-            case HttpRequestParseState::BEFORE_URL:{
-                // 对请求连接前的处理，请求连接以'/'开头
-                if(ch == '/'){
-                    // 遇到/ 说明遇到了URL，开始解析
-                    state_ = HttpRequestParseState::IN_URL;
-                } else if (isblank(ch)){
-
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-            case HttpRequestParseState::IN_URL:{
-                // 进入url中
-                if(ch == '?'){
-                    // 当遇到?时，表明进入了request params的处理。
-                    request_->SetUrl(std::string(start, end));
-                    start = end + 1;
-                    state_ = HttpRequestParseState::BEFORE_URL_PARAM_KEY;
-                   
-                    
-                }else if (isblank(ch)){
-                    // 说明没有请求参数，请求路径完成
-                    request_->SetUrl(std::string(start, end));
-                    start = end + 1;
-                    state_ = HttpRequestParseState::BEFORE_PROTOCOL;
-                }
-                break;
-            }
-            case HttpRequestParseState::BEFORE_URL_PARAM_KEY:{
-                //std::cout << ch << std::endl;
-                if(isblank(ch) || ch == CR || ch == LF){
-                    // 当开始进入url params时，遇到了空格，换行等，则不合法
-                    // std::cout << ch << std::endl;
-                    state_ = HttpRequestParseState::kINVALID;
-                }else{
-                    state_ = HttpRequestParseState::URL_PARAM_KEY;
-                }
-                break;
-            }
-            case HttpRequestParseState::URL_PARAM_KEY:{
-                if(ch == '='){
-                    // 遇到= 说明key解析完成
-                    colon = end;
-                    state_ = HttpRequestParseState::BEFORE_URL_PARAM_VALUE;
-                }else if(isblank(ch)){
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-            case HttpRequestParseState::BEFORE_URL_PARAM_VALUE:{
-                if(isblank(ch) || ch == LF || ch == CR){
-                    state_ = HttpRequestParseState::kINVALID;
-                }else{
-                    state_ = HttpRequestParseState::URL_PARAM_VALUE;
-                }
-                break;
-            }
-
-            case HttpRequestParseState::URL_PARAM_VALUE:{
-                if(ch == '&'){
-                    // 说明遇到了下一个请求参数
-                    state_ = HttpRequestParseState::BEFORE_URL_PARAM_KEY;
-                    request_->SetRequestParams(std::string(start, colon), std::string(colon + 1, end));
-                    start = end + 1;
-                }
-                if(isblank(ch)){
-                    // 遇到空格，说明解析结束。
-                    request_->SetRequestParams(std::string(start, colon), std::string(colon + 1, end));
-                    start = end + 1;
-                    state_ = HttpRequestParseState::BEFORE_PROTOCOL;
-                }else{
-
-                }
-                break;
-            }
-            case HttpRequestParseState::BEFORE_PROTOCOL:{
-                //std::cout << std::string(start, end) << std::endl;
-                if(isblank(ch)){
-                    // nothing
-                }else{
-                    state_ = HttpRequestParseState::PROTOCOL;
-                }
-                break;
-            }
-            case HttpRequestParseState::PROTOCOL:{
-                if(ch == '/'){
-                    request_->SetProtocol(std::string(start, end));
-                    start = end + 1;
-                    state_ = HttpRequestParseState::BEFORE_VERSION;
-                }else{
-
-                }
-                break;
-            }
-
-            case HttpRequestParseState::BEFORE_VERSION:{
-                if(isdigit(ch)){
-                    state_ = HttpRequestParseState::VERSION;
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-
-            case HttpRequestParseState::VERSION:{
-                if(ch == CR){
-                    // 说明结束了
-                    request_->SetVersion(std::string(start, end));
-                    start = end + 1;
-                    state_ = HttpRequestParseState::WHEN_CR;
-                }else if(isdigit(ch) || ch == '.'){
-                    
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-
-            // 需要注意的是，对header的解析并不鲁棒
-            case HttpRequestParseState::HEADER_KEY:{
-                if(ch == ':'){
-                    colon = end;
-                    state_ = HttpRequestParseState::HEADER_VALUE;
-                }
-                break;
-            }
-            case HttpRequestParseState::HEADER_VALUE:{
-                if(isblank(ch)){
-
-                }else if(ch == CR){
-                    request_->AddHeader(std::string(start, colon), std::string(colon + 2, end));
-                    start = end + 1;
-                    state_ = HttpRequestParseState::WHEN_CR;
-                }
-                break;
-            }
-
-            case HttpRequestParseState::WHEN_CR:{
-                if(ch == LF){
-                    // 如果遇到了'\n'之后遇到了'\r'，那就意味着这一行结束了
-                    start = end + 1;
-                    state_ = HttpRequestParseState::CR_LF;
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-            case HttpRequestParseState::CR_LF:{
-                //std::cout << "111" << ch << std::endl;
-                if(ch == CR){
-                    // 说明遇到了空行，大概率时结束了
-                    state_ = HttpRequestParseState::CR_LF_CR;
-                    //start  = end + 1;
-                    //std::cout << "a:" << (*start == '\n') << std::endl;
-                    //std::cout << "b:" << (*end == '\r') << std::endl;
-                }else if(isblank(ch)){
-                    state_ = HttpRequestParseState::kINVALID;
-                }else{
-                    state_ = HttpRequestParseState::HEADER_KEY;
-                }
-                break;
-            }
-            case HttpRequestParseState::CR_LF_CR:{ 
-                // 判断是否需要解析请求体
-                //
-                //std::cout << "c:" << (ch == '\n') << std::endl;
-                //std::cout << "size:" << end-begin << std::endl;
-                if(ch == LF){
-                    // 这就意味着遇到了空行，要进行解析请求体了
-                    if(request_-> GetHeaders().count("Content-Lenght")){
-                        if(atoi(request_->GetHeader("Content-Lenght").c_str()) > 0){
-                            state_ = HttpRequestParseState::BODY;
-                        }else{
-                            state_ = HttpRequestParseState::COMPLETE;
-                        }
-                    }else{
-                        if(end - begin < size){
-                            state_ = HttpRequestParseState::BODY;
-                        }else{
-                            state_ = HttpRequestParseState::COMPLETE;
-                        }
-                    }
-                    start = end + 1;
-                }else{
-                    state_ = HttpRequestParseState::kINVALID;
-                }
-                break;
-            }
-
-            case HttpRequestParseState::BODY:{
-                
-                int bodylength = size - (end - begin);
-                //std::cout << "bodylength:" << bodylength << std::endl;
-                request_->SetBody(std::string(start, start + bodylength));
-                state_ = HttpRequestParseState::COMPLETE;
-                
-                if(state_ == HttpRequestParseState::COMPLETE && request_->GetHeader("Content-Type").substr(0,16) == "application/json"){
-                  request_->ParseJson2Dom();
-                } 
-                break;
-            }
-
-            default:
-                state_ = HttpRequestParseState::kINVALID;
-                break;
-            }
-            
-            end++;
+  auto context = static_cast<HttpContext *>(user_data);
+  if(frame->hd.type == NGHTTP2_SETTINGS && !(frame->hd.flags & NGHTTP2_FLAG_ACK)){
+    context->SetHandshakeDone(1);
+  }
+  else if(frame->hd.type == NGHTTP2_HEADERS || frame->hd.type == NGHTTP2_DATA){
+    context -> current_id_ = frame->hd.stream_id;
+    auto request = context -> GetRequest();
+    if(!request){
+      LOG_ERROR << "stream id error";
+      return 1;
     }
-    
-    return state_ == HttpRequestParseState::COMPLETE;
+
+    if(frame->hd.type == NGHTTP2_HEADERS){
+      request -> SetRequestStatus(HttpRequest::HttpRequestStatus::kData);
+    }
+    else if(frame->hd.type == NGHTTP2_DATA){
+      request -> SetRequestStatus(HttpRequest::HttpRequestStatus::kComplete);
+    }
+
+  }
+  return 0;
 }
+
+
+static int on_begin_headers_callback(nghttp2_session * session, const nghttp2_frame * frame, void *user_data){
+//  puts("On begin header");
+  auto context = static_cast<HttpContext *>(user_data);
+  context -> current_id_ = frame->hd.stream_id;
+  context -> AddStream();
+  return 0;
+}
+
+static int on_header_callback(nghttp2_session *session,
+                              const nghttp2_frame *frame,
+                              const uint8_t *name, size_t namelen,
+                              const uint8_t *value, size_t valuelen,
+                              uint8_t flags, void *user_data) {
+  
+//  puts("On header");
+  auto context = static_cast<HttpContext *>(user_data);
+  auto request = context -> GetRequest();
+  if(!request){
+    LOG_ERROR << "stream id error";
+    return 1;
+  }
+  else{
+    request -> AddHeader(
+      std::string((char*)name, namelen),
+      std::string((char*)value, valuelen)
+    );
+  }
+  return 0;
+}
+
+static int on_data_chunk_recv_callback(nghttp2_session * session, 
+                                uint8_t flags, 
+                                int32_t stream_id,
+                                const uint8_t * data,
+                                size_t len,
+                                void *user_data){
+//  puts("On data");
+  auto context = static_cast<HttpContext *>(user_data);
+  context -> current_id_ = stream_id;
+  auto request = context -> GetRequest();
+  if(!request){
+    LOG_ERROR << "stream id error";
+    return 1;
+  }
+  else{
+    request -> Append(data, len); 
+  }
+
+  return 0;
+}
+static int on_stream_close_callback(nghttp2_session * session,
+                             int32_t stream_id,
+                             uint32_t error_code,
+                             void * user_data){
+  puts("on_stream_close_callback");
+  auto context = static_cast<HttpContext *>(user_data);
+  context -> current_id_ = stream_id;
+  context -> RemoveStream();
+  
+  return 0;
+}
+
+//-------------------------------------------------------------------------------
+
+HttpContext::HttpContext(){
+  buffer_ = std::make_unique<Buffer>();
+  
+
+  //init_callbacks
+  nghttp2_session_callbacks *callbacks = nullptr;
+  nghttp2_session_callbacks_new(&callbacks);
+  nghttp2_session_callbacks_set_on_invalid_frame_recv_callback(callbacks, on_invalid_frame_recv);
+ 
+  nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks,on_frame_recv_callback);
+  
+  nghttp2_session_callbacks_set_on_begin_headers_callback(callbacks,on_begin_headers_callback);
+  nghttp2_session_callbacks_set_on_header_callback(callbacks, on_header_callback);
+  nghttp2_session_callbacks_set_on_data_chunk_recv_callback(callbacks,on_data_chunk_recv_callback);
+  nghttp2_session_callbacks_set_on_stream_close_callback(callbacks,on_stream_close_callback);
+  
+  nghttp2_session_callbacks_set_send_callback(callbacks, on_send_callback);
+  callbacks_.reset(callbacks);
+  
+  //option
+
+  //init_session
+  nghttp2_session * session = nullptr;
+  nghttp2_session_server_new(&session, callbacks, this);
+  session_.reset(session);
+}
+
+HttpContext::~HttpContext(){}
+
+
+void HttpContext::ParseRequest(const char * msg, size_t len){ 
+//  for(size_t i = 0;i < len;i++)printf("%02X ", (unsigned char)msg[i]);
+//  puts("");
+
+  if(handshake_done_ == 0){
+    nghttp2_submit_settings(session_.get(), NGHTTP2_FLAG_NONE, nullptr, 0);
+  }
+  
+
+  size_t offset = 0;
+  int n = 0;
+  while(offset < len){
+    n = nghttp2_session_mem_recv(session_.get(), (const uint8_t * )(msg + offset), len - offset);
+    if(n < 0){
+      LOG_ERROR << "nghttp2 parse error";
+      parse_status_ = false;
+      break;
+    }
+    offset += n;
+  }
+
+  if(handshake_done_ == 1){
+    if(current_id_)handshake_done_ = 2;
+    else nghttp2_session_send(session_.get());
+  }
+  nghttp2_session_send(session_.get());
+}
+
+void HttpContext::AddStream(){
+  if(requests_.count(current_id_)){
+    LOG_ERROR << "the stream"<< current_id_ <<" not been del";
+  }
+  requests_[current_id_] = std::make_unique<HttpRequest>(current_id_);
+}
+
+void HttpContext::RemoveStream(){
+  auto it = requests_.find(current_id_);
+  if(it == requests_.end()){
+    LOG_ERROR << "stream remove error";
+  }
+  else{
+    requests_.erase(it);
+  }
+}
+
 
 HttpRequest * HttpContext::GetRequest(){
-    return request_.get();
+  HttpRequest * request = nullptr;
+  
+  auto it = requests_.find(current_id_);
+  if(it != requests_.end()) request = it->second.get();
+
+  return request;
+}
+
+void HttpContext::SetHandshakeDone(int done){
+  handshake_done_ = done;
+}
+
+int HttpContext::GetHandshakeDone(){
+  return handshake_done_;
+}
+
+nghttp2_session * HttpContext::GetSession() const{
+  return session_.get();
+}
+
+void HttpContext::Append(const char * msg, size_t len){
+  buffer_ -> Append(msg, len);
+}
+
+std::string HttpContext::GetMessage() const{
+  return buffer_->RetrieveAllAsString();
+}
+
+bool HttpContext::GetParseStatus() const{
+  return parse_status_;
 }

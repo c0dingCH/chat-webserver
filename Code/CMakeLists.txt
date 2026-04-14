@@ -33,7 +33,7 @@ set(SRC_ALL ${SRC_BASE} ${SRC_TCP} ${SRC_HTTP} ${SRC_TIMER} ${SRC_LOG} ${SRC_BUS
 
 #添加动态库
 add_library(chat SHARED  ${SRC_ALL})
-target_link_libraries(chat ${CMAKE_THREAD_LIBS_INIT} mysqlclient) 
+target_link_libraries(chat ${CMAKE_THREAD_LIBS_INIT} mysqlclient nghttp2)
 
 
 

@@ -6,24 +6,27 @@
 
 namespace api::transport{
   void HandleMessage(const HttpObjs & hs){
-    std::string reciever_id = hs.request->GetHeader("Reciever_id");
+    std::string reciever_id = hs.request->GetHeader("reciever_id");
     const std::shared_ptr<TcpConnection> & reciever_conn = hs.server->GetConn(reciever_id);
-    hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k100Continue);
+    hs.response->AddHeader(":status","200");
     if(reciever_conn){
-      hs.response->AddHeader("Content-Type", "application/json");
+      //设置返回头
+      hs.response->AddHeader("content-type", "application/json");
       
+      //创建json然后parse后返回
       rapidjson::Document dom;
       dom.SetObject();
 
       rapidjson::Document::AllocatorType & allocator = dom.GetAllocator();
       dom.AddMember("content", rapidjson::Value(hs.request->GetDom()["content"].GetString(),allocator), allocator);
-     
+      
+      
       hs.response->SetBody(hs.request->ParseJson2String(dom));
-      reciever_conn->Send(hs.response->GetMessage());
+      hs.server->Send(reciever_conn, hs.response);
     }
-    hs.response->SetBody("");
-    hs.response->AddHeader("Content-Type", "text/html");
-    hs.response->SetStatusMessage(reciever_conn ? "ok !" : "failed !");
+
+    hs.response->AddHeader("content-type", "text/html");
+    hs.response->SetBody(reciever_conn ? "Send ok !" : (reciever_id + " is not online"));
   }
 
 }

@@ -29,7 +29,8 @@ HttpServer::~HttpServer(){
 }
 
 void HttpServer::HttpDefaultCallback(const HttpObjs & hs){
-  hs.response->AddHeader(":status", "404");
+  hs.response->SetStatusCode(HttpResponse::HttpStatusCode::k404NotFound);
+  hs.response->SetStatusMessage("Not Found");
   hs.response->SetCloseConnection(true);
 }
 
@@ -58,68 +59,64 @@ void HttpServer::OnConnection(const TcpConnectionPtr & conn){
 void HttpServer::OnMessage(const TcpConnectionPtr &conn){
   if(conn->GetState() == TcpConnection::State::kConnected){
     HttpContext * context = conn->GetContext();
-    
-    int handshake_init = context->GetHandshakeDone();
-
-    context->ParseRequest(conn->GetReadBuffer()->beginread(), conn->GetReadBuffer()->readablebytes());
-    HttpRequest * request = context->GetRequest();
-    
-    int handshake_cur = context->GetHandshakeDone();
-  
-    if(handshake_init == 0){
-      if(handshake_cur == 1){
-        conn->Send(context->GetMessage());
-      }
-      else{
-        LOG_INFO << "waiting for shaking";
-      }
-      return;
-    }
-   
-    if(!context->GetParseStatus()){
-      HttpResponse response(context->GetSession());
-      response.AddHeader(":status", "400");
-      Send(conn, &response);
+    if(!context->ParseRequest(conn->GetReadBuffer()->beginread(), conn->GetReadBuffer()->readablebytes())){
+      conn->Send("HTTP/1.1 400 Bad Request \r\n\r\n");
       HandleCloseConnection(conn);
-      return;
     }
-
-    if(request && request->GetRequestStatus() == HttpRequest::HttpRequestStatus::kComplete){
-      if(request->GetHeader("content-type") == "application/json")request->ParseJson2Dom();
-      Onrequest(conn, request);
-    }
-    else{
-      //placehoders
-  
+    if(context->GetCompleteRequest()){
+      Onrequest(conn, context->GetRequest());
+      context->ResetContextStatus();
     }
   }   
 }
 
 void HttpServer::Onrequest(const TcpConnectionPtr & conn, HttpRequest * request){
+  //长连接
   std::string connection_state = request->GetHeader("Connection");
   bool close = (
-      strcasecmp(connection_state.c_str(),"close") == 0
-      //(request->GetVersion() == HttpRequest::Version::kHttp10 && connection_state != "keep-alive" )
+      strcasecmp(connection_state.c_str(),"close") == 0 ||
+      (request->GetVersion() == HttpRequest::Version::kHttp10 && connection_state != "keep-alive" )
   );
+  
+  if(request->GetHeader("Content-Type").find("multipart/form-data") != std::string::npos){
+    size_t it_boundary = request->GetHeader("Content-Type").find("boundary=");
+    if(it_boundary == std::string::npos){
+      LOG_ERROR << "upload Content-Type parse error !";
+    }
+    else{
+      std::string boundary = request->GetHeader("Content-Type").substr(it_boundary + 9);
+      std::string file_message = request->GetBody();
+      size_t it_filename_begin = file_message.find("filename=\"") + 10;
+      size_t it_filename_end   = file_message.find("\"",it_filename_begin);
+      std::string filename = file_message.substr(it_filename_begin, it_filename_end - it_filename_begin);
 
+      size_t it_content = file_message.find("Content-Type");
+      size_t it_file_begin = file_message.find("\r\n", it_content) + 4;
+      size_t it_file_end   = file_message.find("--" + boundary + "--", it_file_begin);
+      std::string file_data = file_message.substr(it_file_begin, it_file_end - it_file_begin);
+
+      std::ofstream of(("../static/" + filename).c_str(), std::ios::out | std::ios::binary); // 这里假设文件很小，能一次性传完
+      of.write(file_data.c_str(), file_data.size());
+      of.close();
+    }
+  }
   HttpResponse response(close);
   response_({conn, this, request, &response});
- 
-  LOG_INFO << "response ok!" ;
-
-  if(response.GetHeader("content-type") == "text/html"){
-    Send(conn ,&response);
+  
+  // 这里只判断html 和 file 两种
+  if(response.GetHeader("Content-Type") == "text/html"){
+    conn->Send(response.GetMessage());
   }
   else{
-    //conn->Send(response.GetBeforeBody());
-    //conn->SendFile(response.GetFileFd(),response.GetContentLength());
+    conn->Send(response.GetBeforeBody());
+    conn->SendFile(response.GetFileFd(),response.GetContentLength());
       
-    //if(::close(response.GetFileFd()) == -1){
-    //  LOG_ERROR<< "Close File Error";
-    //}
-    //else{
-    //  LOG_INFO << "Close FIle Ok !";
-    //}
+    if(::close(response.GetFileFd()) == -1){
+      LOG_ERROR<< "Close File Error";
+    }
+    else{
+      LOG_INFO << "Close FIle Ok !";
+    }
     
   }
 
@@ -165,14 +162,15 @@ void HttpServer::AddConn(const std::string &id, const TcpConnectionPtr &conn){
 }
 
 void HttpServer::RemoveConn(const std::string &id){
+  //LOG_INFO << id_conn_.size();
   std::unique_lock<std::mutex>lock(mtx_);
-  auto it = id_conn_.find(id);
-  if(it != id_conn_.end()){
-    id_conn_.erase(it);
+  if(id_conn_.count(id)){
+    id_conn_.erase(id);
   }
   else{
     LOG_ERROR << "No such id login !";
   }
+  //LOG_INFO << id_conn_.size();
 }
 
 HttpServer::TcpConnectionPtr HttpServer::GetConn(const std::string &id){
@@ -180,7 +178,7 @@ HttpServer::TcpConnectionPtr HttpServer::GetConn(const std::string &id){
   if(!id_conn_.count(id))return nullptr;
   else return id_conn_[id];
 }
-// 这里会崩，记得改
+
 void HttpServer::HandleCloseConnection(const TcpConnectionPtr & conn){
   const std::string & id = conn->GetContext()->GetRequest()->GetDom()["username"].GetString();
   RemoveConn(id);
@@ -189,11 +187,5 @@ void HttpServer::HandleCloseConnection(const TcpConnectionPtr & conn){
 
 std::unique_ptr<MysqlPool>& HttpServer::GetMysqlPool(){
   return mysql_pool_;
-}
-
-void HttpServer::Send(const TcpConnectionPtr & conn, HttpResponse * response){
-  auto context = conn -> GetContext();
-  response->ParseResponse(context->GetSession(), context->current_id_);
-  conn->Send(context->GetMessage());
 }
 

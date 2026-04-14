@@ -56,8 +56,6 @@ public:
 
   void HandleCloseConnection(const TcpConnectionPtr & conn);
 
-  void Send(const TcpConnectionPtr & conn, HttpResponse * response); 
-
 private:
   std::unique_ptr<TcpServer> server_;
   std::unique_ptr<MysqlPool> mysql_pool_;

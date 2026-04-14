@@ -1,73 +1,50 @@
 #pragma once
-#include <string>
-#include <memory>
+#include<string>
+#include<memory>
+#include<map>
+#include<nghttp2/nghttp2.h> 
+
 class HttpRequest;
+class Buffer;
 
 
-#define CR '\r'
-#define LF '\n'
-
-enum HttpRequestParseState
-{
-    kINVALID,         // 无效
-    kINVALID_METHOD,  // 无效请求方法
-    kINVALID_URL,     // 无效请求路径
-    kINVALID_VERSION, // 无效的协议版本号
-    kINVALID_HEADER,  // 无效请求头
-
-    START,  // 解析开始
-    METHOD, // 请求方法
-
-    BEFORE_URL, // 请求连接前的状态，需要'/'开头
-    IN_URL,     // url处理
-
-    BEFORE_URL_PARAM_KEY, // URL请求参数键之前
-    URL_PARAM_KEY, // URL请求参数键
-    BEFORE_URL_PARAM_VALUE, // URL请求参数值之前
-    URL_PARAM_VALUE, // URL请求参数值
-
-    BEFORE_PROTOCOL, // 协议解析之前
-    PROTOCOL,        // 协议
-
-    BEFORE_VERSION, // 版本开始前
-    VERSION_SPLIT,  // 版本分割符
-    VERSION,        // 版本
-
-    HEADER,
-    HEADER_KEY, //
-
-    HEADER_BEFORE_COLON, // 请求头冒号之前
-    HEADER_AFTER_COLON,  // 请求头冒号
-    HEADER_VALUE,        // 请求值
-
-    WHEN_CR, // 遇到一个回车
-
-    CR_LF, // 回车换行
-
-    CR_LF_CR, // 回车换行之后的状态
-
-    BODY, // 请求体
-
-    COMPLETE, // 完成
-
-};
-
-class HttpContext
-{
-
+class HttpContext{
 public:
 
-    // 状态转换机，保存解析的状态
+  // 状态转换机，保存解析的状态
 
-    HttpContext();
-    ~HttpContext();
+  HttpContext();
+  ~HttpContext();
 
-    bool ParseRequest(const char *begin, int size);
-    bool GetCompleteRequest();
-    HttpRequest *GetRequest();
-    void ResetContextStatus();
 
+  void ParseRequest(const char * msg, size_t len);
+  
+  void RemoveStream();
+  HttpRequest *GetRequest();
+  
+  void SetHandshakeDone(int done);
+  int GetHandshakeDone();
+
+  nghttp2_session * GetSession() const; 
+  bool GetParseStatus() const;
+
+  void Append(const char * msg, size_t len);
+  std::string GetMessage() const;
+  
+  void AddStream();
+  int current_id_{0};
 private:
-    std::unique_ptr<HttpRequest> request_;
-    HttpRequestParseState state_;
+
+  std::map<int,std::unique_ptr<HttpRequest> >requests_;
+  int handshake_done_{0}; // 0 无连接 1 等待ack 2 已连接
+
+  std::unique_ptr<Buffer> buffer_;
+  
+  bool parse_status_{true};
+
+  //in oreder !
+  std::unique_ptr<nghttp2_session_callbacks, decltype(&nghttp2_session_callbacks_del)> callbacks_{nullptr,nghttp2_session_callbacks_del};
+  //std::unique_ptr<nghttp2_option, decltype(&nghttp2_option_del)> option_{nullptr,nghttp2_option_del};
+  std::unique_ptr<nghttp2_session, decltype(&nghttp2_session_del)> session_{nullptr,nghttp2_session_del};
+
 };
