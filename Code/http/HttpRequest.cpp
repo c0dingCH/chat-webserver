@@ -35,6 +35,9 @@ void HttpRequest::Append(const uint8_t * data, size_t len){
   buffer_->Append(reinterpret_cast<const char *>(data), len);
 }
 
+std::string HttpRequest::GetData(){
+  return buffer_ -> RetrieveAllAsString();
+}
 
 void HttpRequest::SetRequestStatus(HttpRequestStatus status){
   status_ = status;

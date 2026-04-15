@@ -14,10 +14,10 @@ public:
     kHeader,
     kData, 
     kComplete,
-    kClose,
     kFaild
   };
-
+  //一定要包含data帧，不然就无法kComplete了
+  
   HttpRequest(int stream_id);
   ~HttpRequest();
 
@@ -26,7 +26,8 @@ public:
 
 //const uint8_t * GetBody() const;
   void Append(const uint8_t * data, size_t len);
-  
+  std::string GetData();
+
   HttpRequestStatus GetRequestStatus();
   void SetRequestStatus(const HttpRequestStatus status);
 

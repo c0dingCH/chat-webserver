@@ -29,7 +29,7 @@ static ssize_t on_send_callback(nghttp2_session * session, const uint8_t * data,
 static int on_frame_recv_callback(nghttp2_session * session, 
                                         const nghttp2_frame * frame, 
                                         void * user_data){
-//
+
 //  puts("On frame");
 //  if(frame->hd.type == NGHTTP2_SETTINGS){
 //    puts("On settings");
@@ -67,7 +67,7 @@ static int on_frame_recv_callback(nghttp2_session * session,
 //  else if(frame->hd.type == NGHTTP2_ORIGIN){
 //    puts("On origin");
 //  }
-//
+
 
   auto context = static_cast<HttpContext *>(user_data);
   if(frame->hd.type == NGHTTP2_SETTINGS && !(frame->hd.flags & NGHTTP2_FLAG_ACK)){
@@ -84,10 +84,11 @@ static int on_frame_recv_callback(nghttp2_session * session,
     if(frame->hd.type == NGHTTP2_HEADERS){
       request -> SetRequestStatus(HttpRequest::HttpRequestStatus::kData);
     }
-    else if(frame->hd.type == NGHTTP2_DATA){
+    
+    if(frame->hd.type == NGHTTP2_DATA || frame->hd.flags & NGHTTP2_FLAG_END_STREAM){
       request -> SetRequestStatus(HttpRequest::HttpRequestStatus::kComplete);
     }
-
+    
   }
   return 0;
 }

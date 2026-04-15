@@ -85,7 +85,10 @@ void HttpServer::OnMessage(const TcpConnectionPtr &conn){
       return;
     }
 
-    if(request && request->GetRequestStatus() == HttpRequest::HttpRequestStatus::kComplete){
+    if(context->current_id_ == context->push_id_){
+      return;
+    }
+    else if(request && request->GetRequestStatus() == HttpRequest::HttpRequestStatus::kComplete){
       if(request->GetHeader("content-type") == "application/json")request->ParseJson2Dom();
       Onrequest(conn, request);
     }
@@ -106,21 +109,7 @@ void HttpServer::Onrequest(const TcpConnectionPtr & conn, HttpRequest * request)
   HttpResponse response(close);
   response_({conn, this, request, &response});
 
-  if(response.GetHeader("content-type") == "text/html"){
-    Send(conn ,&response);
-  }
-  else{
-    //conn->Send(response.GetBeforeBody());
-    //conn->SendFile(response.GetFileFd(),response.GetContentLength());
-      
-    //if(::close(response.GetFileFd()) == -1){
-    //  LOG_ERROR<< "Close File Error";
-    //}
-    //else{
-    //  LOG_INFO << "Close FIle Ok !";
-    //}
-    
-  }
+  Send(conn ,&response);
 
   if(response.IsInCloseConnection()){
     HandleCloseConnection(conn);

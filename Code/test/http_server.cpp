@@ -100,27 +100,10 @@ bool RemoveFile(std::string & filename){
   }
 }
 
-bool DownLoadFile(const std::string & filename, HttpResponse * response){ 
-  int filefd = ::open(("../static/files/" + filename).c_str(), O_RDONLY);
-  if(filefd == -1){
-    LOG_ERROR << "OPEN FILE ERROR";
-    return false;
-  }
-  
-  struct stat file_state;
-  fstat(filefd, &file_state);
- 
-  response->AddHeader("content-type","application/octet-stream");
-  response->SetFileFd(filefd);
-  response->AddHeader("content-length",std::to_string(file_state.st_size));
-  
-  return true;
-}
-
 
 void HttpResponseCallback(const HttpObjs & hs){
   const auto method = hs.request->GetHeader(":method");
-  const auto url = hs.request->GetHeader(":path");
+  const auto path = hs.request->GetHeader(":path");
   
   if(method != "GET" && method != "POST"){
     hs.response->AddHeader(":status","400");
@@ -128,24 +111,15 @@ void HttpResponseCallback(const HttpObjs & hs){
   }
 
   if(method == "GET"){
-    if(url == "/"){     
+    if(path == "/"){     
       const std::string body = ReadFile("../static/files/index.html"); 
       hs.response->AddHeader(":status", "200");
       hs.response->SetBody(body);
       hs.response->AddHeader("content-type","text/html");
     }
-    else if(url.substr(0,9) == "/download"){
-      if(DownLoadFile(url.substr(10), hs.response)){
-        hs.response->AddHeader(":status", "200");
-        hs.response->AddHeader("content-type","application/octet-stream");
-      }
-      else{
-        hs.response->AddHeader(":status", "302");
-        hs.response->SetBody("Downloading error");
-        hs.response->AddHeader("content-type","text/html");
-      }
+    else if(path.substr(0,9) == "/download"){ // client download , prev = "../static/files"
+      api::user::Download(hs, path.substr(9)); 
     }
-    
     else{
       hs.response->AddHeader(":status", "404");
       hs.response->SetBody("Sorry Not Found\n");
@@ -153,24 +127,19 @@ void HttpResponseCallback(const HttpObjs & hs){
     }
   }
   else if(method == "POST"){
-    if(url.substr(0,7) == "/upload"){
-      hs.response->AddHeader(":status", "200");
-      hs.response->SetBody("Upload successfully");
-      hs.response->AddHeader("content-type","text/html");
-    }
-    else if(url.substr(0,4) == "/api"){    
-      if(url.substr(4,5) == "/user"){    
-        if(url.substr(9,9) == "/register"){ //注册   
+    if(path.substr(0,4) == "/api"){    
+      if(path.substr(4,5) == "/user"){    
+        if(path.substr(9,9) == "/register"){ //注册   
           api::user::HandleRegister(hs);    
         }
-        else if(url.substr(9,6) == "/login"){//登陆
+        else if(path.substr(9,6) == "/login"){//登陆
           api::user::HandleLogin(hs);    
         }
-        else if(url.substr(9,8) == "/profile"){//修改
+        else if(path.substr(9,8) == "/profile"){//修改
           api::user::HandleProfile(hs);    
         }
       }  
-      else if(url.substr(4,10) == "/transport"){ //msg   
+      else if(path.substr(4,10) == "/transport"){ //msg   
         api::transport::HandleMessage(hs);
       }
     }

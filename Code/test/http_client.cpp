@@ -14,6 +14,7 @@
 std::string id;
 int stream_id;
 std::string msg;
+std::map<std::string,std::string> rheaders; // 如果文件不一次性写完的话会出问题，这里没有用多路复用，所以暂时没什么问题
 
 nghttp2_session_callbacks * callbacks;
 nghttp2_session * session;
@@ -35,12 +36,22 @@ static int on_header_callback(nghttp2_session *session, const nghttp2_frame *fra
     std::string header_name((const char *)name, namelen);
     std::string header_value((const char *)value, valuelen);
     std::cout<<header_name<<" "<<header_value<<std::endl;
+    rheaders[header_name] = header_value;
     return 0;
 }
 
 static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags, int32_t stream_id, const uint8_t *data, size_t len, void *user_data) {
     std::string chunk((const char *)data, len);
-    std::cout<<chunk<<std::endl<<std::endl;
+    if(rheaders["content-type"] == "application/octet-stream"){
+      //追加写入文件
+      std::cout<<"file-len : "<<len<<std::endl;
+      std::cout<<"../client_files/" + rheaders["filename"] << std::endl;
+      std::ofstream ofs(("../client_files/" + rheaders["filename"]).c_str(), std::ios::binary | std::ios::app);
+      ofs.write(reinterpret_cast<const char *>(data), len);
+      ofs.close();
+    }
+    else std::cout<<chunk<<std::endl<<std::endl;
+    
     return 0;
 }
 
@@ -129,32 +140,79 @@ void func3(std::map<std::string,std::string> & headers, std::string & body_){
 }
 
 void func4(std::map<std::string,std::string> & headers, std::string & body_){
-  std::string username, msg;
-  std::cout <<"请输入用户名: ";
-  std::cin >> username;
-  std::cout <<"请输入msg: ";
-  std::cin>> msg;
-
-  std::ostringstream body;
-  body << "{"
-       << "\"content\":\"" << msg << "\""
-       << "}";
-
-  body_ = body.str();
   headers.clear();
   headers[":method"] = "POST";
   headers[":scheme"] = "http";
   headers[":authority"] = "0.0.0:8888";
   headers[":path"] = "/api/transport";
-  headers["content-type"] = "application/json";
+
+  std::string username, msg;
+  std::cout <<"请输入用户名: ";
+  std::cin >> username;
+  
   headers["sender_id"] = id;
   headers["reciever_id"] = username;  
+  
+
+  int op = 0;
+  std::cout<<"发送消息1， 发送文件2 ： ";
+  std::cin>>op;
+  
+  if(op == 1){
+    std::cout <<"请输入msg: ";
+    std::cin>> msg;
+
+    std::ostringstream body;
+    body << "{"
+        << "\"content\":\"" << msg << "\""
+        << "}";
+    
+    headers["content-type"] = "application/json";
+    body_ = body.str();
+  }
+  else if(op == 2){
+    std::string filename;
+    std::cout <<"请输入要发送的文件名: ";
+    std::cin>>filename;
+
+    std::ifstream ifs(("../client_files/" + filename).c_str(), std::ios::binary);
+    if(!ifs){
+      std::cout<<"文件打开失败！"<<std::endl;
+      return;
+    }
+
+    std::ostringstream oss;
+    oss << ifs.rdbuf();
+  
+    headers["content-type"] = "application/octet-stream";    
+    headers["filename"] = filename;
+    body_ = oss.str();
+  } 
+  else{
+    std::cout<<"无效选择！"<<std::endl;
+    return;
+  }
+  
+}
+
+void func5(std::map<std::string,std::string> & headers, std::string & body_){
+  std::string filename;
+  std::cout <<"请输入要下载的文件名: ";
+  std::cin>>filename;
+
+  headers[":method"] = "GET";
+  headers[":scheme"] = "http";
+  headers[":authority"] = "0.0.0:8888";
+  headers[":path"] = "/download/" + filename;
+  headers["content-type"] = "application/octet-stream";
 }
 
 
 void recv(int sockfd){
   bool flag = 0;
   while(1){
+    rheaders.clear();
+
     char buf[1024];
     memset(buf,0,sizeof 0);
     
@@ -182,7 +240,6 @@ void recv(int sockfd){
       nva[3] = {(uint8_t *)":path", (uint8_t *)"/push_stream", strlen(":path"), strlen("/push_stream"), NGHTTP2_NV_FLAG_NONE};
       nghttp2_submit_request(session, nullptr, nva, 4, nullptr, nullptr);
       nghttp2_session_send(session);
-      
       write(sockfd, msg.c_str(), msg.size());
       
       continue;
@@ -266,7 +323,7 @@ int main() {
     recv(sockfd);
   });
 
-  std::cout<<"登陆1，注册2，修改密码3, 发消息4 ："<<std::endl;
+  std::cout<<"登陆1，注册2，修改密码3, 发消息4, 下载文件5 ："<<std::endl;
   while(1){
     // 5. 发送请求
     int chose = 0;
@@ -279,8 +336,9 @@ int main() {
       case 2: func2(headers,body); break;
       case 3: func3(headers,body); break;
       case 4: func4(headers,body); break;
+      case 5: func5(headers,body); break;
     }
-    if(chose > 4 || chose < 1){
+    if(chose > 5 || chose < 1){
       std::cout<<"无效选择"<<std::endl;
       continue;
     }
@@ -288,7 +346,8 @@ int main() {
     msg.clear();
 
     get_request(headers,body);
-   
+    // std::cout<<msg.size()<<std::endl;
+
     write(sockfd, msg.c_str(), msg.size());
   }
 

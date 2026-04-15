@@ -8,6 +8,23 @@
 #include<string>
 #include<memory>
 
+static ssize_t data_read_callback_file(nghttp2_session * session, int32_t stream_id, uint8_t * buf, size_t length, uint32_t * data_flags, nghttp2_data_source * source, void * user_data){
+  auto fm = static_cast<HttpResponse::MmapRead *>(source->ptr);
+  ssize_t cp_len = std::min(length, fm->size - fm->offset);
+  
+  //std::cout<<fm->size<<" "<<length<<std::endl;
+  
+  memcpy(buf, fm->addr + fm->offset, cp_len);
+  fm->offset += cp_len;
+  
+  if(fm->offset == fm->size){
+    *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+  }
+  
+  return cp_len;
+}
+
+
 static ssize_t data_read_callback(nghttp2_session * session, int32_t stream_id, uint8_t * buf, size_t length, uint32_t * data_flags, nghttp2_data_source * source, void * user_data){ 
   auto data = static_cast<Buffer *>(source->ptr);
   size_t cp_len = std::min((size_t)data->readablebytes(), length);
@@ -50,6 +67,9 @@ void HttpResponse::SetBody(const std::string & body){
   body_ -> Append(body.c_str(), body.size());
 }
 
+void HttpResponse::SetMapRead(const MmapRead & map_read){
+  map_read_ = map_read;
+}
 
 void HttpResponse::SetCloseConnection(bool close_connection){
   close_connection_ = close_connection;
@@ -77,7 +97,7 @@ int HttpResponse::PushPromise(nghttp2_session * session, int push_id, const std:
 }
 
 
-void HttpResponse::ParseResponse(nghttp2_session * session, int stream_id){
+void HttpResponse::ParseResponse(nghttp2_session * session, int stream_id, void * data ){
   std::vector<nghttp2_nv>nvs;
   for(const auto &header : headers_){
     nvs.push_back(nghttp2_nv{
@@ -87,9 +107,16 @@ void HttpResponse::ParseResponse(nghttp2_session * session, int stream_id){
     });
   }
   nghttp2_data_provider data_prd;
-  data_prd.read_callback = data_read_callback;
-  data_prd.source.ptr = body_.get();
- 
+  
+  if(headers_["content-type"] == "application/octet-stream"){
+    data_prd.read_callback = data_read_callback_file;
+    data_prd.source.ptr = &map_read_;
+  }
+  else{
+    data_prd.read_callback = data_read_callback;
+    data_prd.source.ptr = body_.get();
+  }
+  
   nghttp2_submit_response(session, stream_id, nvs.data(), nvs.size(), &data_prd);
   nghttp2_session_send(session);
 } 

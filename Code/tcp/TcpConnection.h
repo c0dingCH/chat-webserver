@@ -36,7 +36,6 @@ public:
   void Send(const char * msg, int len);
   void Send(const std::string & msg);
   void SendInLoop(const std::string &msg);
-  void SendFile(int filefd, int siz);  
 
   Buffer * GetReadBuffer() const;
   Buffer * GetSendBuffer() const;

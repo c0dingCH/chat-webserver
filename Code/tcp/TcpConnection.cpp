@@ -162,26 +162,6 @@ void TcpConnection::SendInLoop(const std::string &msg){
 }
 
 
-void TcpConnection::SendFile(int filefd, int siz){ // 这里文件大了可能会造成阻塞
-  int data_size = siz;
-  int write_size = 0;
-  
-  while(write_size < data_size){ // sendfile 自动更新下次写的位置
-    ssize_t write_bytes = sendfile(connfd_, filefd, (off_t *)&write_size, data_size - write_size);
-    if(write_bytes == -1){
-      if(errno == EAGAIN || errno == EWOULDBLOCK){
-        break;
-      }
-      else{
-        LOG_ERROR << "File send error !";
-        break;
-      }
-    }
-  }
-}
-
-
-
 void TcpConnection::ReadNonBlocking(){
   int sockfd = connfd_;
   char buf[1024];
