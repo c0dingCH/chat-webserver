@@ -158,9 +158,6 @@ void HttpServer::RemoveConn(const std::string &id){
   if(it != id_conn_.end()){
     id_conn_.erase(it);
   }
-  else{
-    LOG_ERROR << "No such id login !";
-  }
 }
 
 HttpServer::TcpConnectionPtr HttpServer::GetConn(const std::string &id){
@@ -168,11 +165,11 @@ HttpServer::TcpConnectionPtr HttpServer::GetConn(const std::string &id){
   if(!id_conn_.count(id))return nullptr;
   else return id_conn_[id];
 }
+
 // 这里会崩，记得改
 void HttpServer::HandleCloseConnection(const TcpConnectionPtr & conn){
-  const std::string & id = conn->GetContext()->GetRequest()->GetDom()["username"].GetString();
-  RemoveConn(id);
-  conn->HandleClose();
+  //不需要RemoveConn， 如果登陆成功了，business/User.cpp::Login 函数会自动在conn注册回调， handleclosed的时候会remove掉的
+  conn->HandleClose(); 
 }
 
 std::unique_ptr<MysqlPool>& HttpServer::GetMysqlPool(){

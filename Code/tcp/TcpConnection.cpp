@@ -24,7 +24,7 @@ TcpConnection::TcpConnection(EventLoop * loop, int connfd ,int connid):loop_(loo
   if(loop_ != nullptr){
     channel_ = std::make_unique<Channel>(loop_,connfd_);
     channel_ -> EnableET();  
-    channel_ -> SetReadCallback(std::bind(&TcpConnection::HandleMessage, this));
+    channel_ -> SetReadCallback(std::bind(&TcpConnection::HandleMessage, this)); // 这里用裸指针，避免循环引用
     channel_ -> SetWriteCallback(std::bind(&TcpConnection::HandleWrite, this));
   } 
   read_buffer_ = std::make_unique<Buffer>();
@@ -87,6 +87,7 @@ void TcpConnection::HandleWrite(){
 
     }
     else{
+      //不用手动diablewrite了，既然close，handleclose会dsiableall
       LOG_INFO << "give up writing for disconnection";
     }
   }
@@ -103,8 +104,9 @@ void TcpConnection::HandleClose(){
     channel_ -> DisableAll();
 
     if(on_close_busi_){
-      on_close_busi_();
+      on_close_busi_(); // 无论是正常还是异常关闭，都会调用 该回调来关闭 httpsever对于该conn的引用
     }
+    
     if(on_close_){ 
       on_close_(shared_from_this());
     }
@@ -129,7 +131,10 @@ void TcpConnection::Send(const char * msg, int len){
 void TcpConnection::Send(const std::string & msg){ // Send 安全问题，在RunOneFunc里面有控制到，自己线程直接跑，别的线程串行跑,用回调排队还能防止其他线程串行等待 
   if(state_ == State::kConnected){
     loop_ -> RunOneFunc(std::bind(&TcpConnection::SendInLoop, this, msg));    
-  } 
+  }
+  else{
+    LOG_ERROR << "can't send for disconntetion";
+  }
 }
 
 void TcpConnection::SendInLoop(const std::string &msg){
