@@ -278,3 +278,11 @@ void TcpConnection::SetTimeStamp(TimeStamp timestamp){
   timestamp_ = timestamp;
 }
 
+void TcpConnection::SetUser(User* user){
+  user_ = user;
+}
+
+User* TcpConnection::GetUser() const{
+  return user_;
+}
+

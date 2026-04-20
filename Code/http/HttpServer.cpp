@@ -8,6 +8,7 @@
 #include"EventLoop.h"
 #include"Logging.h"
 #include"MysqlPool.h"
+#include"User.h"
 
 #include<functional>
 #include<memory>
@@ -148,12 +149,12 @@ void HttpServer::SetAutoCloseConn(bool auto_close){
 }
 
 void HttpServer::AddConn(const std::string &id, const TcpConnectionPtr &conn){
-  std::unique_lock<std::mutex>lock(mtx_);
+  std::unique_lock<std::mutex>lock(conn_mtx_);
   id_conn_[id] = conn;
 }
 
 void HttpServer::RemoveConn(const std::string &id){
-  std::unique_lock<std::mutex>lock(mtx_);
+  std::unique_lock<std::mutex>lock(conn_mtx_);
   auto it = id_conn_.find(id);
   if(it != id_conn_.end()){
     id_conn_.erase(it);
@@ -161,9 +162,25 @@ void HttpServer::RemoveConn(const std::string &id){
 }
 
 HttpServer::TcpConnectionPtr HttpServer::GetConn(const std::string &id){
-  std::unique_lock<std::mutex>lock(mtx_);
+  std::unique_lock<std::mutex>lock(conn_mtx_);
   if(!id_conn_.count(id))return nullptr;
   else return id_conn_[id];
+}
+
+User * HttpServer::AddUser(const std::string& user_name){
+  std::unique_lock<std::mutex> lock(user_mtx_);
+  auto user = std::make_unique<User>(user_name);
+  auto user_ptr = user.get();
+  users_[user_name] = std::move(user);
+  return user_ptr;
+}
+
+void HttpServer::RemoveUser(const std::string& user_name){
+  std::unique_lock<std::mutex> lock(user_mtx_);
+  auto it = users_.find(user_name);
+  if(it != users_.end()){
+    users_.erase(it);
+  }
 }
 
 // 这里会崩，记得改

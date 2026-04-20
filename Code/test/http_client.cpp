@@ -207,6 +207,12 @@ void func5(std::map<std::string,std::string> & headers, std::string & body_){
   headers["content-type"] = "application/octet-stream";
 }
 
+void func6(std::map<std::string,std::string> & headers, std::string & body_){
+  headers[":method"] = "POST";
+  headers[":scheme"] = "http";
+  headers[":authority"] = "0.0.0:8888";
+  headers[":path"] = "/api/user/logout";
+}
 
 void recv(int sockfd){
   bool flag = 0;
@@ -323,7 +329,7 @@ int main() {
     recv(sockfd);
   });
 
-  std::cout<<"登陆1，注册2，修改密码3, 发消息4, 下载文件5 ："<<std::endl;
+  std::cout<<"登陆1，注册2，修改密码3, 发消息4, 下载文件5, 注销6 ："<<std::endl;
   while(1){
     // 5. 发送请求
     int chose = 0;
@@ -337,8 +343,9 @@ int main() {
       case 3: func3(headers,body); break;
       case 4: func4(headers,body); break;
       case 5: func5(headers,body); break;
+      case 6: func6(headers,body); break;
     }
-    if(chose > 5 || chose < 1){
+    if(chose > 6 || chose < 1){
       std::cout<<"无效选择"<<std::endl;
       continue;
     }

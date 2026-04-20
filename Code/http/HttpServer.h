@@ -14,6 +14,7 @@ class HttpRequest;
 class EventLoop;
 class MysqlPool;
 class HttpServer;
+class User;
 #define AUTOCLOSETIMEOUT 10.0
 
 struct HttpObjs{
@@ -52,6 +53,10 @@ public:
   void AddConn(const std::string &id, const TcpConnectionPtr &conn);
   void RemoveConn(const std::string &id);
   TcpConnectionPtr GetConn(const std::string &id);
+  
+  User * AddUser(const std::string& user_name);
+  void RemoveUser(const std::string& user_name);
+  
   std::unique_ptr<MysqlPool>& GetMysqlPool(); //只传出引用
 
   void HandleCloseConnection(const TcpConnectionPtr & conn);
@@ -67,7 +72,9 @@ private:
   HttpResponseCallback response_;
 
   std::unordered_map<std::string,TcpConnectionPtr >id_conn_;
+  std::unordered_map<std::string, std::unique_ptr<User>> users_;
 
-  std::mutex mtx_;
+  std::mutex conn_mtx_;
+  std::mutex user_mtx_;
   
 };

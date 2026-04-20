@@ -9,13 +9,13 @@ http_server_explain:
 #include "HttpServer.h"
 #include "HttpRequest.h"
 #include "HttpResponse.h"
+#include "TcpConnection.h"
 #include "EventLoop.h"
 #include "Logging.h"
 #include "MysqlPool.h"
 #include "Mysql.h"
 
 #include "User.h"
-#include "Transport.h"
 
 #include <fcntl.h>
 #include <dirent.h>
@@ -23,6 +23,19 @@ http_server_explain:
 #include <string>
 #include <fstream>
 #include <sys/stat.h>
+
+
+static void RunAfterLogin(const HttpObjs & hs, const std::function<void()> & cb){
+  if(hs.conn -> GetUser()){
+    cb();
+  }
+  else{
+    hs.response->AddHeader(":status", "401");
+    hs.response->SetBody("Not logged in");
+    hs.response->AddHeader("content-type", "text/html");
+  }
+}
+
 
 std::string ReadFile(const char * file_path){
   std::ifstream is(file_path, std::ifstream::in);
@@ -118,7 +131,9 @@ void HttpResponseCallback(const HttpObjs & hs){
       hs.response->AddHeader("content-type","text/html");
     }
     else if(path.substr(0,9) == "/download"){ // client download , prev = "../static/files"
-      api::user::Download(hs, path.substr(9)); 
+      RunAfterLogin(hs, [&hs, &path](){
+        hs.conn->GetUser()->Download(hs, path.substr(9)); 
+      });
     }
     else{
       hs.response->AddHeader(":status", "404");
@@ -129,18 +144,27 @@ void HttpResponseCallback(const HttpObjs & hs){
   else if(method == "POST"){
     if(path.substr(0,4) == "/api"){    
       if(path.substr(4,5) == "/user"){    
-        if(path.substr(9,9) == "/register"){ //注册   
-          api::user::HandleRegister(hs);    
+        if(path.substr(9,9) == "/register"){   
+          User::HandleRegister(hs);    
         }
-        else if(path.substr(9,6) == "/login"){//登陆
-          api::user::HandleLogin(hs);    
+        else if(path.substr(9,6) == "/login"){
+          User::HandleLogin(hs);    
         }
-        else if(path.substr(9,8) == "/profile"){//修改
-          api::user::HandleProfile(hs);    
+        else if(path.substr(9,7) == "/logout"){
+          RunAfterLogin(hs, [&hs](){
+              User::HandleLogout(hs);
+          });
+        }
+        else if(path.substr(9,8) == "/profile"){
+          RunAfterLogin(hs, [&hs](){
+            hs.conn->GetUser()->HandleProfile(hs);
+          });
         }
       }  
-      else if(path.substr(4,10) == "/transport"){ //msg   
-        api::transport::HandleMessage(hs);
+      else if(path.substr(4,10) == "/transport"){
+        RunAfterLogin(hs, [&hs](){
+          hs.conn->GetUser()->HandleTransport(hs);  
+        });
       }
     }
   }

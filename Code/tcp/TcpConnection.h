@@ -9,6 +9,7 @@ class Socket;
 class Channel;
 class Buffer;
 class HttpContext;
+class User;
 
 class TcpConnection : public std::enable_shared_from_this<TcpConnection>{
 public:
@@ -46,6 +47,9 @@ public:
   int GetId() const;
   HttpContext * GetContext();
   TimeStamp GetTimeStamp();
+  
+  void SetUser(User* user);
+  User* GetUser() const;
 
   void HandleClose();
   void HandleMessage();
@@ -69,10 +73,11 @@ private:
 
   void ReadNonBlocking();
 
-  std::unique_ptr<HttpContext>context_;  
-  
+std::unique_ptr<HttpContext>context_;  
+   
   TimeStamp timestamp_;
   bool fault_error_{false};
+  User* user_{nullptr};
 
 
 };

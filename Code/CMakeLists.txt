@@ -14,6 +14,7 @@ include_directories(
     base
     tcp
     http
+    https
     timer
     log
     business
