@@ -21,13 +21,6 @@ class User {
     const std::string& GetUsername() const { return user_id_; }
     void SetUsername(const std::string& user_id) { user_id_ = user_id; }
 
-    template<typename Func>
-    static void WithConnection(std::unique_ptr<MysqlPool>& mysql_pool, Func&& func) {
-      std::unique_ptr<Mysql> db = mysql_pool->Get();
-      func(db);
-      mysql_pool->Put(db);
-    }
-
   private:
     std::string user_id_;
 };

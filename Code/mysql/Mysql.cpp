@@ -1,129 +1,354 @@
 #include "Mysql.h"
 #include "Logging.h"
+#include <mysql/mysql.h>
 #include <iostream>
+#include <unordered_set>
+#include <unordered_map>
 
-Mysql::Mysql(){
+namespace {
+const std::unordered_set<std::string> kValidTables = {"users", "msgs"};
+
+const std::unordered_map<std::string, std::unordered_set<std::string>> kTableFields = {
+    {"users", {"user_id", "password"}},
+    {"msgs", {"sender_id", "receiver_id", "content", "date"}}
+};
+
+bool BuildWhereClause(const std::vector<std::pair<std::string, std::string>> &field_vals,
+                      std::string &where_clause, std::vector<std::string> &values) {
+  for (size_t i = 0; i < field_vals.size(); ++i) {
+    if (i > 0) {
+      where_clause += " AND ";
+    }
+    where_clause += field_vals[i].first + " = ?";
+    values.push_back(field_vals[i].second);
+  }
+  return true;
+}
+
+bool BuildSetClause(const std::vector<std::pair<std::string, std::string>> &field_vals,
+                    std::string &set_clause, std::vector<std::string> &values) {
+  for (size_t i = 0; i < field_vals.size(); ++i) {
+    if (i > 0) {
+      set_clause += ", ";
+    }
+    set_clause += field_vals[i].first + " = ?";
+    values.push_back(field_vals[i].second);
+  }
+  return true;
+}
+
+bool BuildFieldList(const std::vector<std::pair<std::string, std::string>> &field_vals,
+                   std::string &fields, std::string &placeholders, std::vector<std::string> &values) {
+  for (size_t i = 0; i < field_vals.size(); ++i) {
+    if (i > 0) {
+      fields += ", ";
+      placeholders += ", ";
+    }
+    fields += field_vals[i].first;
+    placeholders += "?";
+    values.push_back(field_vals[i].second);
+  }
+  return true;
+}
+bool ExecutePrepared(MYSQL *conn, const std::string &sql,
+                     const std::vector<std::string> &params, std::string &msg) {
+  MYSQL_STMT *stmt = mysql_stmt_init(conn);
+  if (!stmt) {
+    msg = "stmt init failed";
+    return false;
+  }
+
+  if (mysql_stmt_prepare(stmt, sql.c_str(), sql.length())) {
+    msg = "stmt prepare failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  if (params.empty()) {
+    if (mysql_stmt_execute(stmt)) {
+      msg = "stmt execute failed: " + std::string(mysql_stmt_error(stmt));
+      mysql_stmt_close(stmt);
+      return false;
+    }
+    mysql_stmt_close(stmt);
+    return true;
+  }
+
+  unsigned int param_count = mysql_stmt_param_count(stmt);
+  if (param_count != params.size()) {
+    msg = "param count mismatch";
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  std::vector<MYSQL_BIND> binds(param_count);
+  std::vector<std::string> param_bufs(param_count);
+
+  for (size_t i = 0; i < param_count; ++i) {
+    param_bufs[i] = params[i];
+    binds[i].buffer_type = MYSQL_TYPE_STRING;
+    binds[i].buffer = const_cast<char*>(param_bufs[i].data());
+    binds[i].buffer_length = param_bufs[i].length();
+  }
+
+  if (mysql_stmt_bind_param(stmt, binds.data())) {
+    msg = "stmt bind failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  if (mysql_stmt_execute(stmt)) {
+    msg = "stmt execute failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  mysql_stmt_close(stmt);
+  msg = "success";
+  return true;
+}
+
+bool ExecutePreparedSelect(MYSQL *conn, const std::string &sql,
+                         const std::vector<std::string> &params, std::string &msg) {
+  MYSQL_STMT *stmt = mysql_stmt_init(conn);
+  if (!stmt) {
+    msg = "stmt init failed";
+    return false;
+  }
+
+  if (mysql_stmt_prepare(stmt, sql.c_str(), sql.length())) {
+    msg = "stmt prepare failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  unsigned int param_count = mysql_stmt_param_count(stmt);
+  if (params.size() > 0 && param_count != params.size()) {
+    msg = "param count mismatch";
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  if (param_count > 0) {
+    std::vector<MYSQL_BIND> binds(param_count);
+    std::vector<std::string> param_bufs(param_count);
+
+    for (size_t i = 0; i < param_count; ++i) {
+      param_bufs[i] = params[i];
+      binds[i].buffer_type = MYSQL_TYPE_STRING;
+      binds[i].buffer = const_cast<char*>(param_bufs[i].data());
+      binds[i].buffer_length = param_bufs[i].length();
+    }
+
+    if (mysql_stmt_bind_param(stmt, binds.data())) {
+      msg = "stmt bind failed: " + std::string(mysql_stmt_error(stmt));
+      mysql_stmt_close(stmt);
+      return false;
+    }
+  }
+
+  if (mysql_stmt_execute(stmt)) {
+    msg = "stmt execute failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  MYSQL_RES *result = mysql_stmt_result_metadata(stmt);
+  if (!result) {
+    msg = "no result set";
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  int col_count = mysql_num_fields(result);
+  MYSQL_FIELD *db_fields = mysql_fetch_fields(result);
+
+  std::vector<MYSQL_BIND> binds(col_count);
+  std::vector<std::string> col_bufs(col_count);
+  std::vector<unsigned long> col_lengths(col_count);
+
+  for (int i = 0; i < col_count; ++i) {
+    col_bufs[i].resize(2000);
+    binds[i].buffer_type = MYSQL_TYPE_STRING;
+    binds[i].buffer = const_cast<char*>(col_bufs[i].data());
+    binds[i].buffer_length = 2000;
+    binds[i].length = &col_lengths[i];
+    binds[i].is_null = nullptr;
+  }
+
+  if (mysql_stmt_bind_result(stmt, binds.data())) {
+    msg = "stmt bind result failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_free_result(result);
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  if (mysql_stmt_store_result(stmt)) {
+    msg = "stmt store result failed: " + std::string(mysql_stmt_error(stmt));
+    mysql_free_result(result);
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  std::string result_str;
+  while (true) {
+    int ret = mysql_stmt_fetch(stmt);
+    if (ret == MYSQL_NO_DATA) {
+      break;
+    }
+    if (ret != 0) {
+      if (ret == 1) {
+        msg = "stmt fetch failed: " + std::string(mysql_stmt_error(stmt));
+      } else {
+        msg = "stmt fetch failed";
+      }
+      mysql_free_result(result);
+      mysql_stmt_close(stmt);
+      return false;
+    }
+    for (int i = 0; i < col_count; ++i) {
+      if (i > 0) {
+        result_str += " ";
+      }
+      std::string field_name = db_fields[i].name;
+      std::string field_value = col_lengths[i] > 0 ? col_bufs[i].substr(0, col_lengths[i]) : "NULL";
+      result_str += field_name + " " + field_value;
+    }
+    break;
+  }
+
+  if (result_str.empty()) {
+    msg = "Record not found";
+    mysql_free_result(result);
+    mysql_stmt_close(stmt);
+    return false;
+  }
+
+  msg = std::move(result_str);
+  mysql_free_result(result);
+  mysql_stmt_close(stmt);
+  return true;
+}
+
+}  // namespace
+
+bool Mysql::ValidateTable(const std::string &table) { //table legal
+  return kValidTables.find(table) != kValidTables.end();
+}
+
+bool Mysql::ValidateFields(const std::string &table,
+                           const std::vector<std::pair<std::string, std::string>> &fields) { // field legal
+  auto it = kTableFields.find(table);
+  if (it == kTableFields.end()) {
+    return false;
+  }
+  for (const auto &kv : fields) {
+    if (it->second.find(kv.first) == it->second.end()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+Mysql::Mysql() {
   mysql_init(&conn_);
-  if(!mysql_real_connect(&conn_, "localhost", "root", "","chat_db",3306,NULL, 0)){
+  if (!mysql_real_connect(&conn_, "localhost", "root", "", "chat_db", 3306, NULL, 0)) {
     LOG_ERROR << "db connect error!";
   }
 }
 
-Mysql::~Mysql(){
+Mysql::~Mysql() {
   mysql_close(&conn_);
 }
 
-static std::string varchar(const std::string &s){
-  return "'" + s + "'";
+bool Mysql::Insert(std::string table, std::vector<std::pair<std::string, std::string>> field_vals) {
+  std::string msg;
+  return Insert(table, field_vals, msg);
 }
 
-//static void print_res(MYSQL_RES * res){
-//  MYSQL_FIELD * fields;
-//  MYSQL_ROW row;
-//  int cols = mysql_num_fields(res);
-//  fields = mysql_fetch_fields(res);
-//  for(int i = 0;i < cols;i++){
-//    std::cout<<fields[i].name<<"\t\t";
-//  }
-//
-//  std::cout<<std::endl;
-//
-//  while((row = mysql_fetch_row(res))){
-//    for(int i = 0;i < cols;i++){
-//      if(!row[i])std::cout<<"NULL\t\t";
-//      else std::cout<<row[i]<<"\t\t";
-//    }
-//
-//    std::cout<<std::endl;
-//  }
-//}
-//
-Mysql::MysqlStatus Mysql::Insert(const std::string &user_id, const std::string &password){
-  if(Select(user_id) == MysqlStatus::kSuccess)return MysqlStatus::kAlreadyIn;
-  std::string sql = "insert into users values (" + varchar(user_id) + " , " + varchar(password) + ")";
-  int res  = mysql_query(&conn_, sql.c_str());
-  if(!res)return MysqlStatus::kSuccess;
-  else {
-    LOG_ERROR << "Insert error !";
-    return MysqlStatus::kFailed;
-  }
-}
-
-
-Mysql::MysqlStatus Mysql::Delete(const std::string &user_id){
-  if(Select(user_id) != MysqlStatus::kSuccess)return MysqlStatus::kNotFound;
-  std::string sql = "delete from users where user_id = " + varchar(user_id);
-  int res = mysql_query(&conn_, sql.c_str());
-  if(!res)return MysqlStatus::kSuccess;
-  else{
-    LOG_ERROR<<"Delete error !";
-    return MysqlStatus::kFailed;
-  } 
-}
-
-Mysql::MysqlStatus Mysql::Update(const std::string &user_id, const std::string &password){
-  if(Select(user_id) != MysqlStatus::kSuccess)return MysqlStatus::kNotFound;
-  std::string sql = "update users set password = " + varchar(password) + " where user_id = " + varchar(user_id);
-  int res = mysql_query(&conn_, sql.c_str());
-  if(!res)return MysqlStatus::kSuccess;
-  else {
-    LOG_ERROR<<"Update error !";
-    return MysqlStatus::kFailed;
-  }
-}
-
-
-
-
-Mysql::MysqlStatus Mysql::Select(const std::string &user_id){
-  std::string sql = "select * from users where user_id = " + varchar(user_id);
-  MYSQL_RES * res{nullptr};
-  int st = mysql_query(&conn_, sql.c_str());
-  if(st != 0){
-    LOG_ERROR << "Select error !";
-    return MysqlStatus::kFailed;
+bool Mysql::Insert(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg) {
+  if (!ValidateTable(table) || !ValidateFields(table, field_vals)) {
+    msg = "Invalid table or fields";
+    return false;
   }
 
-  res = mysql_store_result(&conn_);
-  int row = mysql_num_rows(res);
-  mysql_free_result(res);  
-
-  return row == 1 ? MysqlStatus::kSuccess : MysqlStatus::kNotFound;
-}
-
-Mysql::MysqlStatus Mysql::Login(const std::string &user_id, const std::string & password){
-  if(Select(user_id) != MysqlStatus::kSuccess)return MysqlStatus::kNotFound;
-  std::string sql = "select * from users where user_id = " + varchar(user_id);
-  MYSQL_RES * res{nullptr};
-  mysql_query(&conn_, sql.c_str());
-  res = mysql_store_result(&conn_);
-  
-  bool suc = false;
-  MYSQL_ROW row;
-  MYSQL_FIELD *fields;
-  int cols = mysql_num_fields(res);
-  fields = mysql_fetch_fields(res);
-  row = mysql_fetch_row(res);
-  for(int i = 0;i < cols ;i++){
-    if(fields[i].name == std::string("password")){
-      suc = row[i] == password;
-      break;
-    }
+  if (Select(table, field_vals, msg)) {
+    msg = "Record already exists";
+    return false;
   }
 
-  mysql_free_result(res);
-  return suc ? MysqlStatus::kSuccess : MysqlStatus::kFailed;
+  std::string fields;
+  std::string placeholders;
+  std::vector<std::string> values;
+  BuildFieldList(field_vals, fields, placeholders, values);
+
+  std::string sql = "INSERT INTO " + table + " (" + fields + ") VALUES (" + placeholders + ")";
+  return ExecutePrepared(&conn_, sql, values, msg);
 }
 
-
-const char * Mysql::GetMsg(MysqlStatus state){
-  switch(state){
-    case MysqlStatus::kUserIdIllegal:return "User_id Illegal";
-    case MysqlStatus::kPasswordIllegal:return "Password Illegal";
-    case MysqlStatus::kAlreadyIn:return "User_id Already In";
-    case MysqlStatus::kNotFound:return "Not Found";
-    case MysqlStatus::kSuccess:return "Operation Successed";
-    case MysqlStatus::kFailed: return "Operation Failed";
+bool Mysql::Select(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg) {
+  if (!ValidateTable(table) || !ValidateFields(table, field_vals)) {
+    msg = "Invalid table or fields";
+    return false;
   }
-  return "No such status";
+
+  std::string where_clause;
+  std::vector<std::string> values;
+  BuildWhereClause(field_vals, where_clause, values);
+
+  std::string sql = "SELECT * FROM " + table + " WHERE " + where_clause;
+  return ExecutePreparedSelect(&conn_, sql, values, msg);
+}
+
+bool Mysql::Delete(std::string table, std::vector<std::pair<std::string, std::string>> field_vals) {
+  std::string msg;
+  return Delete(table, field_vals, msg);
+}
+
+bool Mysql::Delete(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg) {
+  if (!ValidateTable(table) || !ValidateFields(table, field_vals)) {
+    msg = "Invalid table or fields";
+    return false;
+  }
+
+  if (!Select(table, field_vals, msg)) {
+    msg = "Record not found";
+    return false;
+  }
+
+  std::string where_clause;
+  std::vector<std::string> values;
+  BuildWhereClause(field_vals, where_clause, values);
+
+  std::string sql = "DELETE FROM " + table + " WHERE " + where_clause;
+  return ExecutePrepared(&conn_, sql, values, msg);
+}
+
+bool Mysql::Update(std::string table, std::vector<std::pair<std::string, std::string>> field_vals,
+                   std::vector<std::pair<std::string, std::string>> new_field_vals) {
+  std::string msg;
+  return Update(table, field_vals, new_field_vals, msg);
+}
+
+bool Mysql::Update(std::string table, std::vector<std::pair<std::string, std::string>> field_vals,
+                   std::vector<std::pair<std::string, std::string>> new_field_vals, std::string &msg) {
+  if (!ValidateTable(table) || !ValidateFields(table, field_vals) || !ValidateFields(table, new_field_vals)) {
+    msg = "Invalid table or fields";
+    return false;
+  }
+
+  if (!Select(table, field_vals, msg)) {
+    msg = "Record not found";
+    return false;
+  }
+
+  std::string where_clause;
+  std::string set_clause;
+  std::vector<std::string> values;
+
+  BuildWhereClause(field_vals, where_clause, values);
+  BuildSetClause(new_field_vals, set_clause, values);
+
+  std::string sql = "UPDATE " + table + " SET " + set_clause + " WHERE " + where_clause;
+  return ExecutePrepared(&conn_, sql, values, msg);
 }

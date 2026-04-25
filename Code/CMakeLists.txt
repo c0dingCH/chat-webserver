@@ -8,6 +8,8 @@ set(CMAKE_CXX_FLAGS "-g -Wall -Werror -std=c++17")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0")
 
 find_package(Threads REQUIRED)
+set(CMAKE_MODULE_PATH /usr/local/share/cmake ${CMAKE_MODULE_PATH})
+find_package(redis++ REQUIRED PATHS /usr/local/share/cmake/redis++ NO_DEFAULT_PATH)
 
 # 包含目录
 include_directories(
@@ -19,6 +21,7 @@ include_directories(
     log
     business
     mysql
+    /usr/local/include/sw
 )
 
 
@@ -34,7 +37,7 @@ set(SRC_ALL ${SRC_BASE} ${SRC_TCP} ${SRC_HTTP} ${SRC_TIMER} ${SRC_LOG} ${SRC_BUS
 
 #添加动态库
 add_library(chat SHARED  ${SRC_ALL})
-target_link_libraries(chat ${CMAKE_THREAD_LIBS_INIT} mysqlclient nghttp2)
+target_link_libraries(chat ${CMAKE_THREAD_LIBS_INIT} mysqlclient nghttp2 redis++::redis++)
 
 
 

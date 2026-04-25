@@ -13,43 +13,90 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fstream>
+#include <vector>
+#include <string>
+#include <sstream>
+
+namespace {
+  typedef std::pair<std::string,std::string> PSS;
+  const std::vector<PSS>field_vals_model11 = {{"user_id", ""}};
+  const std::vector<PSS>field_vals_model12 = {{"password",""}};
+  const std::vector<PSS>field_vals_model2 = {{"user_id", ""}, {"password",""}};
+  
+  std::vector<PSS> GetFieldVals(const std::string &username, const std::string &password){
+    auto res = field_vals_model2;
+    res[0].second = username;
+    res[1].second = password;
+    return res;
+  }
+  std::vector<PSS> GetFieldVals1(const std::string &username){
+    auto res = field_vals_model11;
+    res[0].second = username;
+    return res;
+  }
+  std::vector<PSS> GetFieldVals2(const std::string &username){
+    auto res = field_vals_model12;
+    res[0].second = username;
+    return res;
+  }
+}
 
 void User::HandleRegister(const HttpObjs& hs) {
-    WithConnection(hs.server->GetMysqlPool(), [&](std::unique_ptr<Mysql>& db) {
-        rapidjson::Document& dom = hs.request->GetDom();
-        auto res_db = db->Insert(dom["username"].GetString(), dom["password"].GetString());
-        
-        hs.response->AddHeader(":status", "200");
-        hs.response->SetBody(db->GetMsg(res_db));
-        hs.response->AddHeader("content-type", "text/html");
-    });
+  rapidjson::Document& dom = hs.request->GetDom();
+  std::string username = dom["username"].GetString();
+  std::string password = dom["password"].GetString();
+
+  std::string msg;
+  hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
+    db->Insert(std::string("users", 5), GetFieldVals(username, password), msg);
+  });
+
+  hs.response->AddHeader(":status", "200");
+  hs.response->SetBody(msg);
+  hs.response->AddHeader("content-type", "text/html");
 }
 
 void User::HandleLogin(const HttpObjs& hs) {
-    WithConnection(hs.server->GetMysqlPool(), [&](std::unique_ptr<Mysql>& db) {
-        rapidjson::Document& dom = hs.request->GetDom();
-        std::string username = dom["username"].GetString();
-        auto res_db = db->Login(username, dom["password"].GetString());
-        
-        if (res_db == Mysql::MysqlStatus::kSuccess) {
-            User* user = hs.server->AddUser(username);
-            user->SetUsername(username);
-            
-            hs.conn->SetUser(user);
-            hs.server->AddConn(username, hs.conn);
-            
-            hs.response->AddHeader(":status", "200");
-            hs.conn->SetOnCloseBusi([user_name = username, server = hs.server]() {
-                server->RemoveUser(user_name);
-                server->RemoveConn(user_name);
-            });
-        } else {
-            hs.response->AddHeader(":status", "200");
-        }
-        
-        hs.response->SetBody(db->GetMsg(res_db));
-        hs.response->AddHeader("content-type", "text/html");
-    });
+  rapidjson::Document& dom = hs.request->GetDom();
+  std::string username = dom["username"].GetString();
+  std::string password = dom["password"].GetString();
+  std::string msg;
+
+  bool res_db = false;
+  hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
+    res_db = db->Select(std::string("users", 5), GetFieldVals1(username), msg);
+  });
+
+  std::stringstream msg_in(msg);
+  std::string id = std::string("password", 8), last;
+  while (msg_in >> msg) {
+    if (last == id) break;
+    last = msg;
+  }
+
+  if (msg == "NULL") msg.clear();
+
+  if(res_db){
+    if (msg != password) {
+      msg = "password incorrect";
+    } else {
+      msg = "success login";
+      User* user = hs.server->AddUser(username);
+      user->SetUsername(username);
+      hs.conn->SetUser(user);
+      hs.server->AddConn(username, hs.conn);
+      hs.conn->SetOnCloseBusi([user_name = username, server = hs.server]() {
+        server->RemoveUser(user_name);
+        server->RemoveConn(user_name);
+      });
+    }
+  }else{
+    msg = "no such username";
+  }
+
+  hs.response->AddHeader(":status", "200");
+  hs.response->SetBody(msg);
+  hs.response->AddHeader("content-type", "text/html");
 }
 
 void User::HandleLogout(const HttpObjs& hs) {
@@ -67,24 +114,27 @@ void User::HandleLogout(const HttpObjs& hs) {
 }
 
 void User::HandleProfile(const HttpObjs& hs) {
-    WithConnection(hs.server->GetMysqlPool(), [&](std::unique_ptr<Mysql>& db) {
-        rapidjson::Document& dom = hs.request->GetDom();
-        auto res_db = db->Update(dom["username"].GetString(), dom["password"].GetString());
-        if (res_db == Mysql::MysqlStatus::kSuccess) {
-            hs.response->AddHeader(":status", "200");
-        } else {
-            hs.response->AddHeader(":status", "200");
-        }
-        hs.response->SetBody(db->GetMsg(res_db));
-        hs.response->AddHeader("content-type", "text/html");
-    });
+  rapidjson::Document& dom = hs.request->GetDom();
+  std::string username = dom["username"].GetString();
+  std::string password = dom["password"].GetString();
+  std::string msg;
+
+  hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
+    db->Update(std::string("users", 5), GetFieldVals1(username), GetFieldVals2(password), msg);
+  });
+
+  hs.response->AddHeader(":status", "200");
+  hs.response->SetBody(msg);
+  hs.response->AddHeader("content-type", "text/html");
 }
 
 void User::HandleTransport(const HttpObjs& hs) {
-  std::string reciever_id = hs.request->GetHeader("reciever_id");
-  const std::shared_ptr<TcpConnection>& reciever_conn = hs.server->GetConn(reciever_id);
-  if (reciever_conn) {
-    HttpContext* context = reciever_conn->GetContext();
+  std::string content; // whitch is insert into db
+  std::string receiver_id = hs.request->GetHeader("receiver_id");
+  std::string sender_id = hs.request->GetHeader("sender_id");
+  const std::shared_ptr<TcpConnection>& receiver_conn = hs.server->GetConn(receiver_id);
+  if (receiver_conn) {
+    HttpContext* context = receiver_conn->GetContext();
     HttpResponse response(true);
         
     response.AddHeader(":status", "200");
@@ -102,22 +152,31 @@ void User::HandleTransport(const HttpObjs& hs) {
        
     if (hs.request->GetHeader("content-type") == "application/json") {
       dom.AddMember("content", rapidjson::Value(hs.request->GetDom()["content"].GetString(), allocator), allocator);
-      path = "/from_id/" + hs.request->GetHeader("sender_id");
+      path = "/from_id/" + sender_id;
     } 
     else {
       std::string filename = hs.request->GetHeader("filename");
       dom.AddMember("filename", rapidjson::Value(filename.c_str(), allocator), allocator);
-      dom.AddMember("download", rapidjson::Value(("/download/" + filename).c_str(), allocator), allocator);
+      dom.AddMember("download", rapidjson::Value(("/download/" + filename + " -button").c_str(), allocator), allocator);
       path = "../public/files/" + filename;
            
-      std::ofstream ofs(path.c_str(), std::ios::binary);
+      std::ofstream ofs(path.c_str(), std::ios::binary); // cover the init file , waiting for handle
       const std::string data = hs.request->GetData();
       ofs.write(data.c_str(), data.size());
             
       path = path.substr(2);
     }
-        
-    response.SetBody(hs.request->ParseJson2String(dom));
+    
+    content = hs.request->ParseJson2String(dom);
+    std::string msg;
+    std::vector<PSS> field_vals = {{"sender_id", sender_id}, {"receiver_id", receiver_id}, {"content",content}}; 
+    hs.server -> GetMysqlPool() -> WithConnection([&](std::unique_ptr<Mysql> &db){
+      db -> Insert("msgs", field_vals, msg);
+    });
+    
+    hs.response->SetBody(msg);
+    
+    response.SetBody(content);
     response.ParseResponse(context->GetSession(), response.PushPromise(
       context->GetSession(),
       context->push_id_,
@@ -126,13 +185,15 @@ void User::HandleTransport(const HttpObjs& hs) {
       hs.server->GetAuthority(),
       path
     ));
-        
-    reciever_conn->Send(context->GetMessage());
+     
+    receiver_conn->Send(context->GetMessage());
   }
-    
+  else{  // no such user's conn
+    hs.response -> SetBody(receiver_id + " is not online");
+  }
+
   hs.response->AddHeader(":status", "200");
   hs.response->AddHeader("content-type", "text/html");
-  hs.response->SetBody(reciever_conn ? "Send ok !" : (reciever_id + " is not online"));
 }
 
 void User::Download(const HttpObjs& hs, const std::string& path) {

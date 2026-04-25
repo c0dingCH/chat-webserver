@@ -44,8 +44,7 @@ static int on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags, 
     std::string chunk((const char *)data, len);
     if(rheaders["content-type"] == "application/octet-stream"){
       //追加写入文件
-      std::cout<<"file-len : "<<len<<std::endl;
-      std::cout<<"../client_files/" + rheaders["filename"] << std::endl;
+      std::cout<<"../client_files/" + rheaders["filename"] << std::endl;;
       std::ofstream ofs(("../client_files/" + rheaders["filename"]).c_str(), std::ios::binary | std::ios::app);
       ofs.write(reinterpret_cast<const char *>(data), len);
       ofs.close();
@@ -151,7 +150,7 @@ void func4(std::map<std::string,std::string> & headers, std::string & body_){
   std::cin >> username;
   
   headers["sender_id"] = id;
-  headers["reciever_id"] = username;  
+  headers["receiver_id"] = username;  
   
 
   int op = 0;
@@ -159,8 +158,13 @@ void func4(std::map<std::string,std::string> & headers, std::string & body_){
   std::cin>>op;
   
   if(op == 1){
-    std::cout <<"请输入msg: ";
-    std::cin>> msg;
+    do{
+      std::cout <<"请输入msg: ";
+      std::cin>> msg;
+      if(msg.size() <= 0)std::cout<<"invalid msg"<<std::endl;
+      if(msg.size() > 2000)std::cout<<"the chars limit 2000" <<std::endl;
+    }while(msg.size() <= 0 || msg.size() > 2000);
+  
 
     std::ostringstream body;
     body << "{"
@@ -172,21 +176,29 @@ void func4(std::map<std::string,std::string> & headers, std::string & body_){
   }
   else if(op == 2){
     std::string filename;
-    std::cout <<"请输入要发送的文件名: ";
-    std::cin>>filename;
 
-    std::ifstream ifs(("../client_files/" + filename).c_str(), std::ios::binary);
-    if(!ifs){
-      std::cout<<"文件打开失败！"<<std::endl;
-      return;
-    }
+    while(1){
+      std::cout <<"请输入要发送的文件名: ";
+      std::cin>>filename;
+    
 
-    std::ostringstream oss;
-    oss << ifs.rdbuf();
+      std::ifstream ifs(("../client_files/" + filename).c_str(), std::ios::binary);
+      if(!ifs){
+        std::cout<<"文件打开失败！"<<std::endl;
+        return;
+      }
+
+      std::ostringstream oss;
+      oss << ifs.rdbuf();
   
-    headers["content-type"] = "application/octet-stream";    
-    headers["filename"] = filename;
-    body_ = oss.str();
+      headers["content-type"] = "application/octet-stream";    
+      headers["filename"] = filename;
+      body_ = oss.str();
+      if(body_.size() > 2e8){
+        std::cout<<"file size doesn't over 200MB"<<std::endl;
+      }
+      else break;
+    }
   } 
   else{
     std::cout<<"无效选择！"<<std::endl;

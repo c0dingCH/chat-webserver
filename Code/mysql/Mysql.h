@@ -1,29 +1,30 @@
 #pragma once
-#include<mysql/mysql.h>
-#include<iostream>
-#include<string>
+#include <mysql/mysql.h>
+#include <string>
+#include <vector>
 
-// 针对users表的操作
-class Mysql{
+
+class Mysql {
 public:
-  enum MysqlStatus{
-    kUserIdIllegal,
-    kPasswordIllegal,
-    kAlreadyIn,
-    kNotFound,
-    kSuccess,
-    kFailed
-  };
   Mysql();
   ~Mysql();
 
-  MysqlStatus Insert(const std::string &user_id, const std::string &password);
-  MysqlStatus Delete(const std::string &user_id);
-  MysqlStatus Update(const std::string &user_id, const std::string &password);
-  MysqlStatus Select(const std::string &user_id); 
-  MysqlStatus Login(const std::string &user_id, const std::string &password);
-  const char * GetMsg(MysqlStatus state); 
+  bool Insert(std::string table, std::vector<std::pair<std::string, std::string>> field_vals);
+  bool Insert(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg);
+
+  bool Select(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg);
+
+  bool Delete(std::string table, std::vector<std::pair<std::string, std::string>> field_vals);
+  bool Delete(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg);
+
+  bool Update(std::string table, std::vector<std::pair<std::string, std::string>> field_vals,
+              std::vector<std::pair<std::string, std::string>> new_field_vals);
+  bool Update(std::string table, std::vector<std::pair<std::string, std::string>> field_vals,
+              std::vector<std::pair<std::string, std::string>> new_field_vals, std::string &msg);
 
 private:
-  MYSQL conn_;
+  bool ValidateTable(const std::string &table);
+  bool ValidateFields(const std::string &table, const std::vector<std::pair<std::string, std::string>> &fields);
+
+  MYSQL conn_{};
 };

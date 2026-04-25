@@ -42,7 +42,14 @@ Each `test/*.cpp` becomes a separate executable in `build/test/`. Run directly:
 ```
 
 ## Key Conventions
-- `file(GLOB ...)` collects sources per module — adding new `.cpp` files auto-includes them
 - `-Werror` enabled — all warnings are errors
 - Non-blocking IO + ET (edge-triggered) epoll
 - Connection lifecycle uses `std::shared_ptr` + `enable_shared_from_this`
+
+## 编码规范 (Google)
+- 方法在上，属性在下
+- 属性 `_name` 下划线命名
+- 可初始化属性在 .h 中 `{}` 初始化
+- Get/Set 开头区分存取
+- 所有方法大驼峰命名
+- 可见度每行抬头，不缩进（1 tab = 2 space）

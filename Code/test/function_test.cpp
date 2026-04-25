@@ -1,14 +1,17 @@
-#include <iostream>
-#include <unistd.h>
-#include "AsyncLogging.h"
-#include "HttpRequest.h"
+#include<iostream>
+#include<vector>
+#include<string>
+#include"Mysql.h"
+#include<sw/redis++/redis++.h>
 using namespace std;
 
 int main(){
-  HttpRequest r;
-  r.SetBody("{\"name\":\"cheng\",\"age\":22}");
-  r.ParseJson2Dom();
-  auto &d = r.GetDom(); 
-  
-  cout<<d["name"].GetString()<<" "<<d["age"].GetInt()<<endl;
+  sw::redis::Redis re("tcp://127.0.0.1:6379");
+  re.lpush("que", {"c", "b","aaa"});
+  vector<string>v;
+  re.lrange("que", 0, -1, back_inserter(v));  
+  if(v.size()){
+    for(auto s : v)cout<<s<<endl;
+
+  }
 }
