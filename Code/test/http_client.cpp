@@ -10,7 +10,7 @@
 #include <nghttp2/nghttp2.h>
 #include <map>
 #include <vector>
-
+    
 std::string id;
 int stream_id;
 std::string msg;
@@ -74,14 +74,14 @@ static ssize_t data_read_callback(nghttp2_session *session, int32_t stream_id, u
 
 void func1(std::map<std::string,std::string> & headers, std::string & body_){
   std::cout<<"Login:"<<std::endl;
-  std::string username, password;
+  std::string user_id, password;
   std::cout <<"请输入用户名: ";
-  std::cin >> username;
+  std::cin >> user_id;
   std::cout <<"请输入密码: ";
   std::cin >> password;
   std::ostringstream body;
   body << "{"
-       << "\"username\":\"" << username << "\","
+       << "\"user_id\":\"" << user_id << "\","
        << "\"password\":\"" << password << "\""
        << "}";
 
@@ -93,19 +93,19 @@ void func1(std::map<std::string,std::string> & headers, std::string & body_){
   headers[":path"] = "/api/user/login";
   headers["content-type"] = "application/json";
   
-  id = username;
+  id = user_id;
 }
 
 void func2(std::map<std::string,std::string> & headers, std::string & body_){
   std::cout<<"Register:"<<std::endl;
-  std::string username, password;
+  std::string user_id, password;
   std::cout <<"请输入用户名: ";
-  std::cin >> username;
+  std::cin >> user_id;
   std::cout <<"请输入密码: ";
   std::cin >> password;
   std::ostringstream body;
   body << "{"
-       << "\"username\":\"" << username << "\","
+       << "\"user_id\":\"" << user_id << "\","
        << "\"password\":\"" << password << "\""
        << "}";
   body_ = body.str();
@@ -119,14 +119,14 @@ void func2(std::map<std::string,std::string> & headers, std::string & body_){
 
 void func3(std::map<std::string,std::string> & headers, std::string & body_){
   std::cout<<"Profile:"<<std::endl;
-  std::string username, password;
+  std::string user_id, password;
   std::cout <<"请输入用户名: ";
-  std::cin >> username;
+  std::cin >> user_id;
   std::cout <<"请输入密码: ";
   std::cin >> password;
   std::ostringstream body;
   body << "{"
-       << "\"username\":\"" << username << "\","
+       << "\"user_id\":\"" << user_id << "\","
        << "\"password\":\"" << password << "\""
        << "}";
   body_ = body.str();
@@ -145,12 +145,12 @@ void func4(std::map<std::string,std::string> & headers, std::string & body_){
   headers[":authority"] = "0.0.0:8888";
   headers[":path"] = "/api/transport";
 
-  std::string username, msg;
+  std::string user_id, msg;
   std::cout <<"请输入用户名: ";
-  std::cin >> username;
+  std::cin >> user_id;
   
   headers["sender_id"] = id;
-  headers["receiver_id"] = username;  
+  headers["receiver_id"] = user_id;  
   
 
   int op = 0;
@@ -225,7 +225,7 @@ void func6(std::map<std::string,std::string> & headers, std::string & body_){
   headers[":authority"] = "0.0.0:8888";
   headers[":path"] = "/api/user/logout";
 }
-
+	
 void recv(int sockfd){
   bool flag = 0;
   while(1){

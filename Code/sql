@@ -1,0 +1,19 @@
+create database chat_db;
+
+create table users(
+    user_id varchar(15) not null,
+    password varchar(20) not null,
+    date datetime default current_timestamp,
+    primary key(user_id)
+);
+
+CREATE TABLE msgs (
+    rowadd int not null auto_increment,          
+    sender_id VARCHAR(15) not null,
+    receiver_id VARCHAR(15) not null,
+    content VARCHAR(2000) not null,
+    date datetime default current_timestamp,
+    PRIMARY KEY (rowadd),                        
+    INDEX idx_sender_receiver (sender_id, receiver_id)            
+);
+

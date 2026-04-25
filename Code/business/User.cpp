@@ -23,32 +23,32 @@ namespace {
   const std::vector<PSS>field_vals_model12 = {{"password",""}};
   const std::vector<PSS>field_vals_model2 = {{"user_id", ""}, {"password",""}};
   
-  std::vector<PSS> GetFieldVals(const std::string &username, const std::string &password){
+  std::vector<PSS> GetFieldVals(const std::string &user_id, const std::string &password){
     auto res = field_vals_model2;
-    res[0].second = username;
+    res[0].second = user_id;
     res[1].second = password;
     return res;
   }
-  std::vector<PSS> GetFieldVals1(const std::string &username){
+  std::vector<PSS> GetFieldVals1(const std::string &user_id){
     auto res = field_vals_model11;
-    res[0].second = username;
+    res[0].second = user_id;
     return res;
   }
-  std::vector<PSS> GetFieldVals2(const std::string &username){
+  std::vector<PSS> GetFieldVals2(const std::string &user_id){
     auto res = field_vals_model12;
-    res[0].second = username;
+    res[0].second = user_id;
     return res;
   }
 }
 
 void User::HandleRegister(const HttpObjs& hs) {
   rapidjson::Document& dom = hs.request->GetDom();
-  std::string username = dom["username"].GetString();
+  std::string user_id = dom["user_id"].GetString();
   std::string password = dom["password"].GetString();
 
   std::string msg;
   hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
-    db->Insert(std::string("users", 5), GetFieldVals(username, password), msg);
+    db->Insert(std::string("users", 5), GetFieldVals(user_id, password), msg);
   });
 
   hs.response->AddHeader(":status", "200");
@@ -58,13 +58,13 @@ void User::HandleRegister(const HttpObjs& hs) {
 
 void User::HandleLogin(const HttpObjs& hs) {
   rapidjson::Document& dom = hs.request->GetDom();
-  std::string username = dom["username"].GetString();
+  std::string user_id = dom["user_id"].GetString();
   std::string password = dom["password"].GetString();
   std::string msg;
 
   bool res_db = false;
   hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
-    res_db = db->Select(std::string("users", 5), GetFieldVals1(username), msg);
+    res_db = db->Select(std::string("users", 5), GetFieldVals1(user_id), msg);
   });
 
   std::stringstream msg_in(msg);
@@ -81,17 +81,17 @@ void User::HandleLogin(const HttpObjs& hs) {
       msg = "password incorrect";
     } else {
       msg = "success login";
-      User* user = hs.server->AddUser(username);
-      user->SetUsername(username);
+      User* user = hs.server->AddUser(user_id);
+      user->SetUsername(user_id);
       hs.conn->SetUser(user);
-      hs.server->AddConn(username, hs.conn);
-      hs.conn->SetOnCloseBusi([user_name = username, server = hs.server]() {
+      hs.server->AddConn(user_id, hs.conn);
+      hs.conn->SetOnCloseBusi([user_name = user_id, server = hs.server]() {
         server->RemoveUser(user_name);
         server->RemoveConn(user_name);
       });
     }
   }else{
-    msg = "no such username";
+    msg = "no such user_id";
   }
 
   hs.response->AddHeader(":status", "200");
@@ -102,9 +102,9 @@ void User::HandleLogin(const HttpObjs& hs) {
 void User::HandleLogout(const HttpObjs& hs) {
   User* user = hs.conn->GetUser();
   if (user) { 
-    std::string username = user->GetUsername();
-    hs.server->RemoveUser(username);
-    hs.server->RemoveConn(username);
+    std::string user_id = user->GetUsername();
+    hs.server->RemoveUser(user_id);
+    hs.server->RemoveConn(user_id);
     hs.conn->SetUser(nullptr);
   }
     
@@ -115,12 +115,12 @@ void User::HandleLogout(const HttpObjs& hs) {
 
 void User::HandleProfile(const HttpObjs& hs) {
   rapidjson::Document& dom = hs.request->GetDom();
-  std::string username = dom["username"].GetString();
+  std::string user_id = dom["user_id"].GetString();
   std::string password = dom["password"].GetString();
   std::string msg;
 
   hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
-    db->Update(std::string("users", 5), GetFieldVals1(username), GetFieldVals2(password), msg);
+    db->Update(std::string("users", 5), GetFieldVals1(user_id), GetFieldVals2(password), msg);
   });
 
   hs.response->AddHeader(":status", "200");

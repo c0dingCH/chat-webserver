@@ -9,8 +9,8 @@ namespace {
 const std::unordered_set<std::string> kValidTables = {"users", "msgs"};
 
 const std::unordered_map<std::string, std::unordered_set<std::string>> kTableFields = {
-    {"users", {"user_id", "password"}},
-    {"msgs", {"sender_id", "receiver_id", "content", "date"}}
+    {"users", {"user_id", "password", "date"}},
+    {"msgs", {"rowadd", "sender_id", "receiver_id", "content", "date"}}
 };
 
 bool BuildWhereClause(const std::vector<std::pair<std::string, std::string>> &field_vals,
@@ -70,7 +70,9 @@ bool ExecutePrepared(MYSQL *conn, const std::string &sql,
       mysql_stmt_close(stmt);
       return false;
     }
+
     mysql_stmt_close(stmt);
+    msg = "success";
     return true;
   }
 
@@ -252,7 +254,7 @@ bool Mysql::ValidateFields(const std::string &table,
 
 Mysql::Mysql() {
   mysql_init(&conn_);
-  if (!mysql_real_connect(&conn_, "localhost", "root", "", "chat_db", 3306, NULL, 0)) {
+  if (!mysql_real_connect(&conn_, "localhost", "chat", "chat123", "chat_db", 3306, NULL, 0)) {
     LOG_ERROR << "db connect error!";
   }
 }
@@ -346,8 +348,8 @@ bool Mysql::Update(std::string table, std::vector<std::pair<std::string, std::st
   std::string set_clause;
   std::vector<std::string> values;
 
-  BuildWhereClause(field_vals, where_clause, values);
   BuildSetClause(new_field_vals, set_clause, values);
+  BuildWhereClause(field_vals, where_clause, values);
 
   std::string sql = "UPDATE " + table + " SET " + set_clause + " WHERE " + where_clause;
   return ExecutePrepared(&conn_, sql, values, msg);
