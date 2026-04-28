@@ -1,17 +1,19 @@
 #include<iostream>
 #include<vector>
 #include<string>
-#include"Mysql.h"
+#include"Redis.h"
+#include"MysqlPool.h"
 #include<sw/redis++/redis++.h>
+#include<rapidjson/rapidjson.h>
+#include<rapidjson/document.h>
+
 using namespace std;
 
 int main(){
-  sw::redis::Redis re("tcp://127.0.0.1:6379");
-  re.lpush("que", {"c", "b","aaa"});
-  vector<string>v;
-  re.lrange("que", 0, -1, back_inserter(v));  
-  if(v.size()){
-    for(auto s : v)cout<<s<<endl;
-
-  }
+  const char* json = "{\"sender_id\":\"root\",\"content\":\"{\\\"content\\\":\\\"\xe4\xbd\xa0\xe6\x98\xaf...\\\"}\",\"date\":\"\"}";
+rapidjson::Document doc;
+doc.Parse(json,strlen(json));
+assert(!doc.HasParseError());   // 通过
+auto t = doc["date"].GetString(); 
+std::cout<< t << std::endl;
 }

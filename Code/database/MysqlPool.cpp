@@ -3,7 +3,7 @@
 #include <thread>
 
 MysqlPool::MysqlPool()
-: conn_nums_(std::thread::hardware_concurrency())
+: conn_nums_(std::thread::hardware_concurrency() * 2)
 {}
 
 MysqlPool::~MysqlPool(){

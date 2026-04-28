@@ -20,7 +20,7 @@ include_directories(
     timer
     log
     business
-    mysql
+    database
     /usr/local/include/sw
 )
 
@@ -32,8 +32,8 @@ file(GLOB SRC_HTTP http/*.cpp)
 file(GLOB SRC_TIMER timer/*.cpp)
 file(GLOB SRC_LOG log/*.cpp)
 file(GLOB SRC_BUSINESS business/*.cpp)
-file(GLOB SRC_MYSQL mysql/*.cpp)
-set(SRC_ALL ${SRC_BASE} ${SRC_TCP} ${SRC_HTTP} ${SRC_TIMER} ${SRC_LOG} ${SRC_BUSINESS} ${SRC_MYSQL})
+file(GLOB SRC_DATABASE database/*.cpp)
+set(SRC_ALL ${SRC_BASE} ${SRC_TCP} ${SRC_HTTP} ${SRC_TIMER} ${SRC_LOG} ${SRC_BUSINESS} ${SRC_DATABASE})
 
 #添加动态库
 add_library(chat SHARED  ${SRC_ALL})

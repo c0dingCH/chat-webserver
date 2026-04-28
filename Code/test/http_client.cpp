@@ -225,7 +225,20 @@ void func6(std::map<std::string,std::string> & headers, std::string & body_){
   headers[":authority"] = "0.0.0:8888";
   headers[":path"] = "/api/user/logout";
 }
-	
+
+void func7(std::map<std::string,std::string> & headers, std::string & body_){
+  std::string recv_id;
+  std::cout<<"请输入对方id：";
+  std::cin>>recv_id;
+
+  headers[":method"] = "POST";
+  headers[":scheme"] = "http";
+  headers[":authority"] = "0.0.0:8888";
+  headers[":path"] = "/api/recentmsgs";
+  headers["receiver_id"] = recv_id;
+}
+
+
 void recv(int sockfd){
   bool flag = 0;
   while(1){
@@ -341,7 +354,7 @@ int main() {
     recv(sockfd);
   });
 
-  std::cout<<"登陆1，注册2，修改密码3, 发消息4, 下载文件5, 注销6 ："<<std::endl;
+  std::cout<<"登陆1，注册2，修改密码3, 发消息4, 下载文件5, 注销6, 最近消息7："<<std::endl;
   while(1){
     // 5. 发送请求
     int chose = 0;
@@ -356,8 +369,9 @@ int main() {
       case 4: func4(headers,body); break;
       case 5: func5(headers,body); break;
       case 6: func6(headers,body); break;
+      case 7: func7(headers,body); break;
     }
-    if(chose > 6 || chose < 1){
+    if(chose > 7 || chose < 1){
       std::cout<<"无效选择"<<std::endl;
       continue;
     }

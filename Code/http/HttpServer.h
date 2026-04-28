@@ -13,6 +13,7 @@ class HttpContext;
 class HttpRequest;
 class EventLoop;
 class MysqlPool;
+class RedisPool;
 class HttpServer;
 class User;
 #define AUTOCLOSETIMEOUT 10.0
@@ -57,7 +58,8 @@ public:
   User * AddUser(const std::string& user_name);
   void RemoveUser(const std::string& user_name);
   
-  std::unique_ptr<MysqlPool>& GetMysqlPool(); //只传出引用
+  MysqlPool * GetMysqlPool(); 
+  RedisPool * GetRedisPool();
 
   void HandleCloseConnection(const TcpConnectionPtr & conn);
 
@@ -68,6 +70,8 @@ private:
   std::string authority_;
   std::unique_ptr<TcpServer> server_;
   std::unique_ptr<MysqlPool> mysql_pool_;
+  std::unique_ptr<RedisPool> redis_pool_;
+
   bool auto_close_conn_{false};
   HttpResponseCallback response_;
 

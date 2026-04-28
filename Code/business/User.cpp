@@ -5,8 +5,10 @@
 #include "HttpContext.h"
 #include "Logging.h"
 
+
 #include "User.h"
-#include "Mysql.h"
+#include "Redis.h"
+#include "RedisPool.h"
 
 #include <rapidjson/document.h>
 #include <fcntl.h>
@@ -22,6 +24,7 @@ namespace {
   const std::vector<PSS>field_vals_model11 = {{"user_id", ""}};
   const std::vector<PSS>field_vals_model12 = {{"password",""}};
   const std::vector<PSS>field_vals_model2 = {{"user_id", ""}, {"password",""}};
+  const int kdefaultN = 20;
   
   std::vector<PSS> GetFieldVals(const std::string &user_id, const std::string &password){
     auto res = field_vals_model2;
@@ -39,17 +42,28 @@ namespace {
     res[0].second = user_id;
     return res;
   }
+
+  bool LegalPassword(const std::string & psw, std::string &msg){
+    if(psw.size() < 6 || psw.size() > 20){
+      msg = "password's length should be not shotter than 6 and not longger then 20";
+      return false;
+    }
+    return true;
+  }
+
 }
 
 void User::HandleRegister(const HttpObjs& hs) {
   rapidjson::Document& dom = hs.request->GetDom();
   std::string user_id = dom["user_id"].GetString();
   std::string password = dom["password"].GetString();
-
+   
   std::string msg;
-  hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
-    db->Insert(std::string("users", 5), GetFieldVals(user_id, password), msg);
-  });
+  if(LegalPassword(password, msg)){
+    hs.server->GetRedisPool()->WithConnection([&](std::unique_ptr<Redis>& db) {
+      db->Insert(std::string("users", 5), GetFieldVals(user_id, password), msg);
+    });
+  }
 
   hs.response->AddHeader(":status", "200");
   hs.response->SetBody(msg);
@@ -63,7 +77,7 @@ void User::HandleLogin(const HttpObjs& hs) {
   std::string msg;
 
   bool res_db = false;
-  hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
+  hs.server->GetRedisPool()->WithConnection([&](std::unique_ptr<Redis>& db) {
     res_db = db->Select(std::string("users", 5), GetFieldVals1(user_id), msg);
   });
 
@@ -73,8 +87,6 @@ void User::HandleLogin(const HttpObjs& hs) {
     if (last == id) break;
     last = msg;
   }
-
-  if (msg == "NULL") msg.clear();
 
   if(res_db){
     if (msg != password) {
@@ -119,9 +131,11 @@ void User::HandleProfile(const HttpObjs& hs) {
   std::string password = dom["password"].GetString();
   std::string msg;
 
-  hs.server->GetMysqlPool()->WithConnection([&](std::unique_ptr<Mysql>& db) {
-    db->Update(std::string("users", 5), GetFieldVals1(user_id), GetFieldVals2(password), msg);
-  });
+  if(LegalPassword(password, msg)){
+    hs.server->GetRedisPool()->WithConnection([&](std::unique_ptr<Redis>& db) {
+      db->Update(std::string("users", 5), GetFieldVals1(user_id), GetFieldVals2(password), msg);
+    });
+  }
 
   hs.response->AddHeader(":status", "200");
   hs.response->SetBody(msg);
@@ -170,7 +184,7 @@ void User::HandleTransport(const HttpObjs& hs) {
     content = hs.request->ParseJson2String(dom);
     std::string msg;
     std::vector<PSS> field_vals = {{"sender_id", sender_id}, {"receiver_id", receiver_id}, {"content",content}}; 
-    hs.server -> GetMysqlPool() -> WithConnection([&](std::unique_ptr<Mysql> &db){
+    hs.server -> GetRedisPool() -> WithConnection([&](std::unique_ptr<Redis> &db){
       db -> Insert("msgs", field_vals, msg);
     });
     
@@ -239,4 +253,36 @@ void User::Upload(const HttpObjs& hs, const std::string& path) {
   ofs.close();
     
   hs.response->AddHeader(":status", "200");
+}
+
+void User::GetRecentMsgs(const HttpObjs& hs) {
+  std::string receiver_id = hs.request->GetHeader("receiver_id");
+  std::string msg;
+
+  std::vector<std::string> results;
+  hs.server->GetRedisPool()->WithConnection([&](std::unique_ptr<Redis>& db) {
+    results = db->GetRecentMsgs(user_id_, receiver_id, kdefaultN, msg);
+  });
+  
+  rapidjson::Document dom;
+  dom.SetObject();
+  rapidjson::Document::AllocatorType& allocator = dom.GetAllocator();
+  
+  rapidjson::Value array(rapidjson::kArrayType);
+  
+  for (const auto& result : results) {
+    rapidjson::Document item;
+    item.Parse(result.c_str(), result.size());
+    if (!item.HasParseError()) {
+      rapidjson::Value v;
+      v.CopyFrom(item, allocator);   
+      array.PushBack(v, allocator);
+    }
+  }
+  
+  dom.AddMember("msgs", array, allocator);
+  std::string json = hs.request->ParseJson2String(dom);
+  hs.response->AddHeader(":status", "200");
+  hs.response->SetBody(json);
+  hs.response->AddHeader("content-type", "application/json");
 }

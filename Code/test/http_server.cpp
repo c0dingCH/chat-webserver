@@ -166,6 +166,11 @@ void HttpResponseCallback(const HttpObjs & hs){
           hs.conn->GetUser()->HandleTransport(hs);  
         });
       }
+      else if(path.substr(4,11) == "/recentmsgs"){
+        RunAfterLogin(hs, [&hs](){
+          hs.conn->GetUser()->GetRecentMsgs(hs);  
+        });
+      }
     }
   }
   return;

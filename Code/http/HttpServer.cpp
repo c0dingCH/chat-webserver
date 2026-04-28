@@ -8,6 +8,7 @@
 #include"EventLoop.h"
 #include"Logging.h"
 #include"MysqlPool.h"
+#include"RedisPool.h"
 #include"User.h"
 
 #include<functional>
@@ -24,6 +25,7 @@ HttpServer::HttpServer(const char * ip, const short & port){
   server_ -> OnMessage(std::bind(&HttpServer::OnMessage, this, std::placeholders::_1));
   SetHttpCallback(std::bind(&HttpServer::HttpDefaultCallback, this,std::placeholders::_1));
   mysql_pool_ = std::make_unique<MysqlPool>();
+  redis_pool_ = std::make_unique<RedisPool>(mysql_pool_.get());
 }
 
 HttpServer::~HttpServer(){
@@ -133,6 +135,7 @@ void HttpServer::ActiveCloseConn(const std::weak_ptr<TcpConnection> & weak_ptr){
 
 void HttpServer::Start(){
   mysql_pool_->Start();
+  redis_pool_->Start();
   server_->Start();
 }
 
@@ -189,8 +192,12 @@ void HttpServer::HandleCloseConnection(const TcpConnectionPtr & conn){
   conn->HandleClose(); 
 }
 
-std::unique_ptr<MysqlPool>& HttpServer::GetMysqlPool(){
-  return mysql_pool_;
+MysqlPool * HttpServer::GetMysqlPool(){
+  return mysql_pool_.get();
+} 
+
+RedisPool * HttpServer::GetRedisPool(){
+  return redis_pool_.get();
 }
 
 void HttpServer::Send(const TcpConnectionPtr & conn, HttpResponse * response){

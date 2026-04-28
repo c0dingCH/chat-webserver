@@ -1,6 +1,9 @@
 #include "Mysql.h"
 #include "Logging.h"
 #include <mysql/mysql.h>
+#include <rapidjson/document.h>
+#include <rapidjson/writer.h>
+#include <rapidjson/stringbuffer.h>
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
@@ -170,10 +173,12 @@ bool ExecutePreparedSelect(MYSQL *conn, const std::string &sql,
   std::vector<unsigned long> col_lengths(col_count);
 
   for (int i = 0; i < col_count; ++i) {
-    col_bufs[i].resize(2000);
+    size_t n = 50;
+    if(i == 2) n = 2020;
+    col_bufs[i].resize(n);
     binds[i].buffer_type = MYSQL_TYPE_STRING;
     binds[i].buffer = const_cast<char*>(col_bufs[i].data());
-    binds[i].buffer_length = 2000;
+    binds[i].buffer_length = n;
     binds[i].length = &col_lengths[i];
     binds[i].is_null = nullptr;
   }
@@ -263,12 +268,12 @@ Mysql::~Mysql() {
   mysql_close(&conn_);
 }
 
-bool Mysql::Insert(std::string table, std::vector<std::pair<std::string, std::string>> field_vals) {
+bool Mysql::Insert(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals) {
   std::string msg;
   return Insert(table, field_vals, msg);
 }
 
-bool Mysql::Insert(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg) {
+bool Mysql::Insert(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals, std::string& msg) {
   if (!ValidateTable(table) || !ValidateFields(table, field_vals)) {
     msg = "Invalid table or fields";
     return false;
@@ -288,7 +293,7 @@ bool Mysql::Insert(std::string table, std::vector<std::pair<std::string, std::st
   return ExecutePrepared(&conn_, sql, values, msg);
 }
 
-bool Mysql::Select(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg) {
+bool Mysql::Select(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals, std::string& msg) {
   if (!ValidateTable(table) || !ValidateFields(table, field_vals)) {
     msg = "Invalid table or fields";
     return false;
@@ -302,12 +307,12 @@ bool Mysql::Select(std::string table, std::vector<std::pair<std::string, std::st
   return ExecutePreparedSelect(&conn_, sql, values, msg);
 }
 
-bool Mysql::Delete(std::string table, std::vector<std::pair<std::string, std::string>> field_vals) {
+bool Mysql::Delete(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals) {
   std::string msg;
   return Delete(table, field_vals, msg);
 }
 
-bool Mysql::Delete(std::string table, std::vector<std::pair<std::string, std::string>> field_vals, std::string &msg) {
+bool Mysql::Delete(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals, std::string& msg) {
   if (!ValidateTable(table) || !ValidateFields(table, field_vals)) {
     msg = "Invalid table or fields";
     return false;
@@ -326,14 +331,14 @@ bool Mysql::Delete(std::string table, std::vector<std::pair<std::string, std::st
   return ExecutePrepared(&conn_, sql, values, msg);
 }
 
-bool Mysql::Update(std::string table, std::vector<std::pair<std::string, std::string>> field_vals,
-                   std::vector<std::pair<std::string, std::string>> new_field_vals) {
+bool Mysql::Update(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals,
+                   const std::vector<std::pair<std::string, std::string>>& new_field_vals) {
   std::string msg;
   return Update(table, field_vals, new_field_vals, msg);
 }
 
-bool Mysql::Update(std::string table, std::vector<std::pair<std::string, std::string>> field_vals,
-                   std::vector<std::pair<std::string, std::string>> new_field_vals, std::string &msg) {
+bool Mysql::Update(const std::string& table, const std::vector<std::pair<std::string, std::string>>& field_vals,
+                   const std::vector<std::pair<std::string, std::string>>& new_field_vals, std::string& msg) {
   if (!ValidateTable(table) || !ValidateFields(table, field_vals) || !ValidateFields(table, new_field_vals)) {
     msg = "Invalid table or fields";
     return false;
@@ -353,4 +358,130 @@ bool Mysql::Update(std::string table, std::vector<std::pair<std::string, std::st
 
   std::string sql = "UPDATE " + table + " SET " + set_clause + " WHERE " + where_clause;
   return ExecutePrepared(&conn_, sql, values, msg);
+}
+
+std::vector<std::string> Mysql::SelectMsgs(const std::string& sender_id, const std::string& receiver_id, int n, std::string& msg) {
+  std::vector<std::string> results;
+
+  std::string u1 = sender_id;
+  std::string u2 = receiver_id;
+  if (u1 > u2) {
+    u1.swap(u2);
+  }
+
+  std::string sql = "SELECT sender_id, content, date FROM msgs WHERE "
+                  "(sender_id = ? AND receiver_id = ?) OR "
+                  "(sender_id = ? AND receiver_id = ?) "
+                  "ORDER BY date DESC LIMIT ?";
+
+  MYSQL_STMT* stmt = mysql_stmt_init(&conn_);
+  if (!stmt) {
+    msg = "stmt init failed";
+    return results;
+  }
+
+  if (mysql_stmt_prepare(stmt, sql.c_str(), sql.length())) {
+    msg = "stmt prepare failed";
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  std::vector<std::string> params = {u1, u2, u2, u1, std::to_string(n)};
+  unsigned int param_count = mysql_stmt_param_count(stmt);
+  if (param_count != params.size()) {
+    msg = "param count mismatch";
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  std::vector<MYSQL_BIND> binds(param_count);
+  std::vector<std::string> param_bufs(param_count);
+  for (size_t i = 0; i < param_count; ++i) {
+    param_bufs[i] = params[i];
+    binds[i].buffer_type = MYSQL_TYPE_STRING;
+    binds[i].buffer = const_cast<char*>(param_bufs[i].data());
+    binds[i].buffer_length = param_bufs[i].length();
+  }
+
+  if (mysql_stmt_bind_param(stmt, binds.data())) {
+    msg = "stmt bind failed";
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  if (mysql_stmt_execute(stmt)) {
+    msg = "stmt execute failed";
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  MYSQL_RES* result_meta = mysql_stmt_result_metadata(stmt);
+  if (!result_meta) {
+    msg = "no result set";
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  int col_count = mysql_num_fields(result_meta);
+
+  std::vector<MYSQL_BIND> result_binds(col_count);
+  std::vector<std::string> col_bufs(col_count);
+  std::vector<unsigned long> col_lengths(col_count);
+
+  for (int i = 0; i < col_count; ++i) {
+    size_t n = 50;
+    if(i == 2) n = 2020;
+    col_bufs[i].resize(n);
+    result_binds[i].buffer_type = MYSQL_TYPE_STRING;
+    result_binds[i].buffer = const_cast<char*>(col_bufs[i].data());
+    result_binds[i].buffer_length = n;
+    result_binds[i].length = &col_lengths[i];
+  }
+
+  if (mysql_stmt_bind_result(stmt, result_binds.data())) {
+    msg = "stmt bind result failed";
+    mysql_free_result(result_meta);
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  if (mysql_stmt_store_result(stmt)) {
+    msg = "stmt store result failed";
+    mysql_free_result(result_meta);
+    mysql_stmt_close(stmt);
+    return results;
+  }
+
+  rapidjson::Document doc;
+  while (true) {
+    int ret = mysql_stmt_fetch(stmt);
+    if (ret == MYSQL_NO_DATA) {
+      break;
+    }
+    if (ret != 0) {
+      msg = "stmt fetch failed";
+      break;
+    }
+
+    std::string sender = col_bufs[0].substr(0, col_lengths[0]);
+    std::string content = col_bufs[1].substr(0, col_lengths[1]);
+    std::string date = col_bufs[2].substr(0, col_lengths[2]);
+
+    doc.SetObject();
+    rapidjson::Document::AllocatorType& allocator = doc.GetAllocator();
+    doc.AddMember("sender_id", rapidjson::Value(sender.c_str(), allocator), allocator);
+    doc.AddMember("content", rapidjson::Value(content.c_str(), allocator), allocator);
+    doc.AddMember("date", rapidjson::Value(date.c_str(), allocator), allocator);
+
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    doc.Accept(writer);
+    results.emplace_back(buffer.GetString());
+    
+  }
+
+  mysql_free_result(result_meta);
+  mysql_stmt_close(stmt);
+  msg = "success";
+  return results;
 }
