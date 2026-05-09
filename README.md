@@ -135,7 +135,8 @@ cmake .. && make
 ```  
 
 ### 压力测试截图
-![Uploading 568904798-89487de8-0596-48a9-bd82-49197aafe5e3.png…]()
+<img width="1034" height="171" alt="568904798-89487de8-0596-48a9-bd82-49197aafe5e3" src="https://github.com/user-attachments/assets/c552c060-6ce0-44c7-ab00-0f28892abaab" />
+
 
 
 ### 生成库文件
