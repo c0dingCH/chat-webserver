@@ -15,8 +15,8 @@ find_package(redis++ REQUIRED PATHS /usr/local/share/cmake/redis++ NO_DEFAULT_PA
 include_directories(
     base
     tcp
-    http
-    https
+    http1
+    http2
     timer
     log
     business
@@ -28,12 +28,12 @@ include_directories(
 # 自动收集所有子目录里的源文件
 file(GLOB SRC_BASE base/*.cpp)
 file(GLOB SRC_TCP tcp/*.cpp)
-file(GLOB SRC_HTTP http/*.cpp)
+file(GLOB SRC_HTTP2 http2/*.cpp)
 file(GLOB SRC_TIMER timer/*.cpp)
 file(GLOB SRC_LOG log/*.cpp)
 file(GLOB SRC_BUSINESS business/*.cpp)
 file(GLOB SRC_DATABASE database/*.cpp)
-set(SRC_ALL ${SRC_BASE} ${SRC_TCP} ${SRC_HTTP} ${SRC_TIMER} ${SRC_LOG} ${SRC_BUSINESS} ${SRC_DATABASE})
+set(SRC_ALL ${SRC_BASE} ${SRC_TCP} ${SRC_HTTP2} ${SRC_TIMER} ${SRC_LOG} ${SRC_BUSINESS} ${SRC_DATABASE})
 
 #添加动态库
 add_library(chat SHARED  ${SRC_ALL})

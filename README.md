@@ -61,12 +61,12 @@ chat-main/
 │   │   ├── TcpConnection.cpp/h  # TCP连接
 │   │   ├── TcpServer.cpp/h      # TCP服务器
 │   │   └── Buffer.cpp/h         # 缓冲区
-│   ├── http/          # HTTP协议
+│   ├── http1/          # HTTP协议
 │   │   ├── HttpContext.cpp/h    # HTTP上下文
 │   │   ├── HttpRequest.cpp/h    # HTTP请求
 │   │   ├── HttpResponse.cpp/h   # HTTP响应
 │   │   └── HttpServer.cpp/h     # HTTP服务器
-│   ├── https/         # HTTP/2.0
+│   ├── http2/         # HTTP/2.0
 │   │   ├── HttpsContext.cpp/h   # HTTPS上下文
 │   │   ├── HttpsRequest.cpp/h   # HTTPS请求
 │   │   ├── HttpsResponse.cpp/h  # HTTPS响应
