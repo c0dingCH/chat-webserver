@@ -1,4 +1,4 @@
-# C++ Chat Server
+<img width="925" height="195" alt="image" src="https://github.com/user-attachments/assets/5cd34224-ef0a-4769-a17e-3655f93356bb" /># C++ Chat Server
 
 一个基于Linux网络编程的高性能C++聊天服务器，采用Muduo风格的Reactor模式架构。
 
@@ -138,6 +138,7 @@ cmake .. && make
 虚拟机cpu参数：1 * 4   
 纯粹的tcp压测，http只重写了onmessage，固定的字节回复  
 <img width="931" height="196" alt="70ce0d6c-5a7e-497b-bd36-b6e7a0d2c02a" src="https://github.com/user-attachments/assets/b1d14589-f325-4fcb-b214-e5cea46005ec" />
+<img width="925" height="195" alt="image" src="https://github.com/user-attachments/assets/00074758-badd-4093-8ae4-91e6fa36ac5e" />
 
 
 
