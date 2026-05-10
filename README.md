@@ -135,7 +135,9 @@ cmake .. && make
 ```  
 
 ### 压力测试截图
-<img width="1034" height="171" alt="568904798-89487de8-0596-48a9-bd82-49197aafe5e3" src="https://github.com/user-attachments/assets/c552c060-6ce0-44c7-ab00-0f28892abaab" />
+虚拟机cpu参数：1 * 4   
+<img width="931" height="196" alt="70ce0d6c-5a7e-497b-bd36-b6e7a0d2c02a" src="https://github.com/user-attachments/assets/b1d14589-f325-4fcb-b214-e5cea46005ec" />
+
 
 
 
