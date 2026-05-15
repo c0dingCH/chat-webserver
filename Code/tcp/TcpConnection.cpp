@@ -23,7 +23,6 @@
 TcpConnection::TcpConnection(EventLoop * loop, int connfd ,int connid):loop_(loop),connfd_(connfd),connid_(connid){
   if(loop_ != nullptr){
     channel_ = std::make_unique<Channel>(loop_,connfd_);
-    channel_ -> EnableET();  
     channel_ -> SetReadCallback(std::bind(&TcpConnection::HandleMessage, this)); // 这里用裸指针，避免循环引用
     channel_ -> SetWriteCallback(std::bind(&TcpConnection::HandleWrite, this));
   } 
@@ -42,6 +41,7 @@ TcpConnection::~TcpConnection(){
 }
 
 void TcpConnection::ConnectionEstablished(){
+  channel_ -> EnableET();  
   channel_->EnableRead();
   channel_->Tie(shared_from_this());
   if(on_connect_){
@@ -51,6 +51,9 @@ void TcpConnection::ConnectionEstablished(){
 
 void TcpConnection::ConnectionDestructor(){
   loop_->DeleteChannel(channel_.get());
+  if(on_connect_){
+    on_connect_(shared_from_this());
+  }
 }
 
 
@@ -130,7 +133,7 @@ void TcpConnection::Send(const char * msg, int len){
 
 void TcpConnection::Send(const std::string & msg){ // Send 安全问题，在RunOneFunc里面有控制到，自己线程直接跑，别的线程串行跑,用回调排队还能防止其他线程串行等待 
   if(state_ == State::kConnected){
-    loop_ -> RunOneFunc(std::bind(&TcpConnection::SendInLoop, this, msg));    
+    loop_ -> RunOneFunc(std::bind(&TcpConnection::SendInLoop, shared_from_this(), msg)); // 防止业务层跨线程调用的时候conn被删了，回头send的时候访问指针悬空了（如果shared_from_this 换成 this）   
   }
   else{
     LOG_ERROR << "can't send for disconntetion";

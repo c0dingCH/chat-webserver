@@ -44,7 +44,8 @@ void TcpServer::Start(){
 void TcpServer::HandleNewConnection(int sockfd){
   assert(sockfd != -1);
 
-  std::shared_ptr<TcpConnection> conn = std::make_shared<TcpConnection>(event_loop_thread_pool_->GetNextLoop(),sockfd, next_connid_);
+  EventLoop * loop = event_loop_thread_pool_->GetNextLoop();
+  std::shared_ptr<TcpConnection> conn = std::make_shared<TcpConnection>(loop, sockfd, next_connid_);
   conn->SetOnCloseCallback(std::bind(&TcpServer::HandleCloseConnection, this, std::placeholders::_1));
   conn->SetOnMessageCallback(on_message_);//自己保留一份，不要用move
   conn->SetOnConnectCallback(on_connect_);
@@ -55,7 +56,7 @@ void TcpServer::HandleNewConnection(int sockfd){
     next_connid_ = 1;
   }
   
-  conn->ConnectionEstablished();
+  loop -> QueueOneFunc(std::bind(&TcpConnection::ConnectionEstablished, conn));
 }
 
 void TcpServer::HandleCloseConnection(const std::shared_ptr<TcpConnection> &conn){
@@ -72,17 +73,13 @@ void TcpServer::HandleCloseConnectionInPoller(const std::shared_ptr<TcpConnectio
 }
 
 
-
-
 void TcpServer::OnConnect(const std::function<void(std::shared_ptr<TcpConnection>)> & cb){
   on_connect_ = std::move(cb) ;//值传递，move就不用拷贝了
 }
 
 void TcpServer::OnMessage(const std::function<void(std::shared_ptr<TcpConnection>)> & cb){
   on_message_ = std::move(cb) ;//值传递，move就不用拷贝了
-  
 }
-
 
 void TcpServer::SetThreadNums(const int & thread_nums){
   event_loop_thread_pool_ -> SetThreadNums(thread_nums);
