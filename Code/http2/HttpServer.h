@@ -5,6 +5,7 @@
 #include<map>
 #include<unordered_map>
 #include<mutex>
+#include<functional>
 
 class TcpConnection;
 class TcpServer;
@@ -66,6 +67,7 @@ public:
   void Send(const TcpConnectionPtr & conn, HttpResponse * response); 
 
   std::string GetAuthority() const;
+  void SetOnClose(const std::function<void()> &cb){ on_close_ = cb; }
 private:
   std::string authority_;
   std::unique_ptr<TcpServer> server_;
@@ -80,5 +82,6 @@ private:
 
   std::mutex conn_mtx_;
   std::mutex user_mtx_;
-  
+
+  std::function<void()> on_close_;  
 };

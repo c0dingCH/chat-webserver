@@ -29,7 +29,6 @@ public:
   void SetOnCloseCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> &cb);
   void SetOnMessageCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> & cb);
   void SetOnConnectCallback(const std::function<void(const std::shared_ptr<TcpConnection>)> & cb);
-  void SetOnCloseBusi(const std::function<void()> & cb); // 虽然这里写了一个对外开放的接口，但是没用上
   void SetTimeStamp(TimeStamp timestamp);
 
   void Read();
@@ -69,7 +68,6 @@ private:
   std::function<void(const std::shared_ptr<TcpConnection>)> on_close_;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_message_;
   std::function<void(const std::shared_ptr<TcpConnection>)> on_connect_;
-  std::function<void()>on_close_busi_;
 
   void ReadNonBlocking();
 

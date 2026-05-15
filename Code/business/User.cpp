@@ -97,7 +97,7 @@ void User::HandleLogin(const HttpObjs& hs) {
       user->SetUsername(user_id);
       hs.conn->SetUser(user);
       hs.server->AddConn(user_id, hs.conn);
-      hs.conn->SetOnCloseBusi([user_name = user_id, server = hs.server]() {
+      hs.server->SetOnClose([user_name = user_id, server = hs.server]() {
         server->RemoveUser(user_name);
         server->RemoveConn(user_name);
       });

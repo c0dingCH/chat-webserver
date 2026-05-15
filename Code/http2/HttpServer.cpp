@@ -44,18 +44,26 @@ void HttpServer::SetHttpCallback(const HttpResponseCallback & cb){
 
 
 void HttpServer::OnConnection(const TcpConnectionPtr & conn){
-  sockaddr_in addr{};
-  socklen_t len = sizeof addr;
-  getpeername(conn->GetFd(), (sockaddr *)&addr, &len);
-
-  LOG_INFO  <<  CurrentThread::tid()
-            <<  " EchoServer::OnNewConnection : new connection"
-            <<  " fd[#"<< conn->GetFd()<<"]"
-            <<  " from "<< inet_ntoa(addr.sin_addr)<<":"<<ntohs(addr.sin_port);
-
-  if(auto_close_conn_){
-    auto loop = conn->GetLoop();
-    loop -> RunAfter(AUTOCLOSETIMEOUT, std::bind(&HttpServer::ActiveCloseConn, this, conn));
+  if(conn->GetState() == TcpConnection::State::kConnected){
+    sockaddr_in addr{};
+    socklen_t len = sizeof addr;
+    getpeername(conn->GetFd(), (sockaddr *)&addr, &len);
+  
+    LOG_INFO  <<  CurrentThread::tid()
+              <<  " EchoServer::OnNewConnection : new connection"
+              <<  " fd[#"<< conn->GetFd()<<"]"
+              <<  " from "<< inet_ntoa(addr.sin_addr)<<":"<<ntohs(addr.sin_port);
+  
+    if(auto_close_conn_){
+      auto loop = conn->GetLoop();
+      loop -> RunAfter(AUTOCLOSETIMEOUT, std::bind(&HttpServer::ActiveCloseConn, this, conn));
+    }
+  }
+  else if(conn->GetState() == TcpConnection::State::kConnected){
+    if(on_close_){
+      on_close_();
+      on_close_ = nullptr;
+    }
   }
 }
 
@@ -186,9 +194,7 @@ void HttpServer::RemoveUser(const std::string& user_name){
   }
 }
 
-// 这里会崩，记得改
 void HttpServer::HandleCloseConnection(const TcpConnectionPtr & conn){
-  //不需要RemoveConn， 如果登陆成功了，business/User.cpp::Login 函数会自动在conn注册回调， handleclosed的时候会remove掉的
   conn->HandleClose(); 
 }
 

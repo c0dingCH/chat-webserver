@@ -105,11 +105,6 @@ void TcpConnection::HandleClose(){
     LOG_INFO <<"client fd: "<<connfd_<<" kClosed ";
     
     channel_ -> DisableAll();
-
-    if(on_close_busi_){
-      on_close_busi_(); // 无论是正常还是异常关闭，都会调用 该回调来关闭 httpsever对于该conn的引用
-    }
-    
     if(on_close_){ 
       on_close_(shared_from_this());
     }
@@ -273,9 +268,6 @@ void TcpConnection::SetOnConnectCallback(const std::function<void(const std::sha
   on_connect_ = std::move(cb);
 }
 
-void TcpConnection::SetOnCloseBusi(const std::function<void()> &cb){
-  on_close_busi_ = std::move(cb);
-}
 
 void TcpConnection::SetTimeStamp(TimeStamp timestamp){
   timestamp_ = timestamp;
